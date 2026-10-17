@@ -1,0 +1,187 @@
+const $=s=>document.querySelector(s);let MEDIA={},S,view='events',selW=null,undoStack=[],dataPath='';
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const toast=t=>{const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',2600)};
+const cur=()=>S.events.find(e=>e.id===S.currentId)||S.events[0];
+const get=p=>p.split('.').reduce((o,k)=>o&&o[k],S),set=(p,v)=>{const a=p.split('.'),l=a.pop();a.reduce((o,k)=>o[k],S)[l]=v};
+let saveT;const save=()=>{clearTimeout(saveT);saveT=setTimeout(()=>window.sb.save(S).then(()=>{$('#status').textContent='Saved '+new Date().toLocaleTimeString()}),200)};
+const snap=()=>{undoStack.push(JSON.stringify(S));if(undoStack.length>100)undoStack.shift()};
+const evSig=()=>S.events.map(e=>({id:e.id,date:e.date,name:e.name}));
+const mut=fn=>{snap();const before=evSig();try{fn()}catch(e){toast(e.message);undoStack.pop();return}Core.stamp(S);evSig().forEach(a=>{const b=before.find(x=>x.id===a.id);if(b&&(b.name!==a.name||b.date!==a.date)&&window.sb.archiveMove)window.sb.archiveMove(b,a).then(r=>{if(r&&r.error)toast(r.error);refreshArchive()})});draw();save()};
+const undo=()=>{if(!undoStack.length)return toast('Nothing to undo');S=JSON.parse(undoStack.pop());Core.stamp(S);draw();save();toast('Undone')};
+const PH={role:'Set role',winner:'Winner: TBD',method:'Finish: TBD',note:'Add a note',a:'Select wrestler',b:'Select wrestler',type:'Match type: TBD',title:'Title: none',result:'Result: TBD',beat:'Angle: TBD',venue:'Venue TBD',name:'Name',u:'Select wrestler',o:'Select wrestler',tpl:'Pick template'};
+const LISTOF=p=>{const a=p.split('.'),l=a[a.length-1];if(p.includes('.sheet.'))return null;if(l==='a'||l==='b'||a[0]==='titles'&&a[2]==='holders')return'roster';if(l==='winner')return'winner';if(a[0]==='roster'&&l==='role')return'roles';if(l==='method')return'methods';if(l==='winner'?'winner':l==='method'?'methods':['type','title','result','beat','venues'].includes(l))return l==='venue'?'venues':l+(l==='type'?'s':l==='title'?'s':l==='result'?'s':'s');
+ if(l==='venue')return'venues';if(l==='tpl')return'templates';if(l==='months')return'months';if(l==='kind')return'kind';return null};
+const optsOf=n=>n==='winner'?Core.winnerOpts(get(ctx.p.replace(/\.winner$/,''))):n==='roster'?Core.namesByRole(S):n==='titles'?['No title',...Core.titleNames(S)]:n==='months'?[...Array(12)].map((_,i)=>String(i+1)):n==='kind'?['Annual Cycle','Special Event']:S.lists[n];
+const disp=(p,v)=>p.endsWith('.months')?v+(v==1?' month':' months'):p.endsWith('.kind')?(v==='annual'?'Annual Cycle':'Special Event'):v;
+const F=(p,cls='')=>{const v=get(p),l=p.split('.').pop();return `<span class="f ${cls} ${v||v===0?'':'empty'}" data-k="${p}">${esc(v||v===0?disp(p,v):(PH[l]||'Set value'))}</span>`};
+const furl=f=>f?(window.sb&&window.sb.urlFor?window.sb.urlFor(f):'file://'+encodeURI(f)):'';
+const av=n=>{const m=n&&MEDIA[n];return m&&m.promo?`<img class="av" src="${furl(m.promo)}">`:''};
+async function refreshMedia(){try{MEDIA=await window.sb.mediaAll(Core.names(S))}catch(e){MEDIA={}}let ch=false;S.roster.forEach(r=>{const v=MEDIA[r.name]&&MEDIA[r.name].video;const base=v?String(v).split('/').pop():'';if(base&&r.video!==base){r.video=base;ch=true}});if(ch){Core.stamp(S);save()}draw()}
+const E=()=>`events.${S.events.indexOf(cur())}`;
+const TABS=[['events','Events'],['board','Event Board'],['story','Story Arc'],['titles','Titles'],['roster','Roster'],['archive','Archive']];
+function draw(){const sc=$('#main').scrollTop;$('#tabs').innerHTML=TABS.map(t=>`<div class="tab ${view===t[0]?'on':''}" data-tab="${t[0]}">${t[1]}</div>`).join('');$('#main').innerHTML=({events:vEvents,board:vBoard,story:vStory,roster:vRoster,titles:vTitles,archive:vArchive})[view]();$('#main').scrollTop=sc}
+function vEvents(){const evs=Core.sortEvents(S.events);const card=e=>`<div class="card ${e.id===S.currentId?'cur':''}" data-ev="${e.id}"><b>${esc(e.name)}</b><span class="badge ${e.kind==='annual'?'':'s'}">${Core.kindLabel(e).toUpperCase()}</span><div class="sub">${esc(Core.fmtDate(e.date))}${e.cycleMonth?' | '+e.cycleMonth:''}</div><div class="sub">${Core.played(e).length} matches${e.placeholder?' | placeholder':''}</div></div>`;
+ return `<div class="g pad"><div class="row"><div><h1>Events</h1><div class="sub">Open an event to build its card. Right-click an event for more.</div></div><div style="flex:1"></div><button class="b" id="newev">+ New event</button></div></div>
+ <div class="g pad"><h2>Annual Cycle</h2><div class="cards">${evs.filter(e=>e.kind==='annual').map(card).join('')}</div></div>
+ <div class="g pad"><h2>Special Events</h2><div class="cards">${evs.filter(e=>e.kind!=='annual').map(card).join('')||'<div class="note">None yet.</div>'}</div></div>`}
+function vBoard(){const e=cur(),P=E();
+ const rows=e.matches.map((m,i)=>`<div class="m" data-row="${P}.matches.${i}"><div class="n">${i+1}</div><div class="who">${av(m.a)}${F(`${P}.matches.${i}.a`,'sel')}</div><div class="vs">VS</div><div class="who">${av(m.b)}${F(`${P}.matches.${i}.b`,'sel')}</div><div>${F(`${P}.matches.${i}.type`,'sel')}</div>
+ <div class="sub2">${F(`${P}.matches.${i}.title`)} ${F(`${P}.matches.${i}.result`)} ${F(`${P}.matches.${i}.winner`,'win')} ${m.winner?F(`${P}.matches.${i}.method`):''}${m.winner&&m.winnerPlanned?'<span class="tag">winner PLANNED</span>':''} ${F(`${P}.matches.${i}.beat`)} ${m.sample?'<span class="tag">SAMPLE pairing only. Not a booked match. No result claimed.</span>':''}${m.planned?'<span class="tag">PLANNED from booking notes. Not a result.</span>':''}</div>${m.note?`<div class="sub2 mnote">${F(`${P}.matches.${i}.note`)}</div>`:''}</div>`).join('');
+ return `<div class="g pad"><h1>${F(P+'.name')}</h1><div class="row sub"><span class="badge">${Core.kindLabel(e).toUpperCase()}</span> ${F(P+'.kind')} <input type="date" id="dt" value="${esc(e.date)}"> ${F(P+'.venue')} <span>Story length:</span> ${F(P+'.months','sel')} ${e.placeholder?'<span class="note">placeholder details, confirm</span>':''}</div>
+ <div class="row sub" style="margin-top:8px">${S.titles.map((t,i)=>esc(t.name)+': '+t.holders.map((_,j)=>F(`titles.${i}.holders.${j}`)).join(' and ')).join(' | ')}</div></div>
+ <div class="g pad"><h2>Match Board (${e.matches.length})</h2>${rows}<div class="row"><button class="b o" id="addm">+ Add match</button><span class="note">Click a dashed item for options, or right-click anything. Sample pairings are placeholders.</span></div></div>
+ ${boardExtras(e,P)}
+ <div class="g pad"><h2>End of Event Summary</h2><div class="row sub" style="margin-bottom:8px">Template: ${F(P+'.summary.tpl')} <button class="b" id="gen">Generate draft from card</button><button class="b o" id="exmd">Export Markdown</button><button class="b o" id="expng">Export PNG</button><button class="b o" id="expdf">Export PDF</button></div>
+ <textarea id="sum" placeholder="Click Generate draft from card, then edit it here.">${esc(e.summary.text)}</textarea></div>`}
+let sheetStyle='bw';{const st=document.createElement('style');st.textContent=Core.SHEET_CSS+'.sheet .f{white-space:pre-wrap}.sheet .sh-bb{cursor:text}';document.head.appendChild(st)}
+function sheetView(e,P){const sh=e.sheet;if(!sh)return '';
+ const sec=sh.sections.map((s,si)=>{const mi=s.matchId?e.matches.findIndex(x=>x.id===s.matchId):-1,m=mi>=0?e.matches[mi]:null;
+  const boxes=s.boxes.map((b,bi)=>{const bp=`${P}.sheet.sections.${si}.boxes.${bi}`;return `<div class="sh-box ${b.kind==='result'?'result':''}"><span class="sh-x" data-boxrm="${si}.${bi}" title="Remove this box">x</span><div class="sh-bh">${b.code?`<span class="c">${F(bp+'.code')}</span>`:''}${F(bp+'.title')}</div>${b.label?`<div class="sh-lab">${F(bp+'.label')}:</div>`:''}<div class="sh-bb ${b.text?'':'empty'}" data-k="${bp}.text">${b.text?Core.bodyHTML(b.text):'Click to add text'}</div></div>`}).join('');
+  return `<div class="sh-sec"><div class="sh-sh"><span class="sh-n">${F(`${P}.sheet.sections.${si}.num`)}</span>${F(`${P}.sheet.sections.${si}.title`)}${s.tag?`<span class="sh-tag">${F(`${P}.sheet.sections.${si}.tag`)}</span>`:''}${m?`<span class="sh-win">Winner: ${F(`${P}.matches.${mi}.winner`)} ${m.winner?F(`${P}.matches.${mi}.method`):''}${m.winner&&m.winnerPlanned?' (PLANNED)':''}</span>`:''}</div>${s.linkEvent?`<div style="padding:4px 12px;font-size:12px;font-weight:700">Leads to: <a href="#" data-goev="${esc(s.linkEvent)}" style="color:inherit">${esc(s.linkEvent)} (Special Event)</a></div>`:''}<div class="sh-row">${boxes}</div><button class="b o sh-add" data-boxadd="${si}">+ Add step box</button></div>`}).join('');
+ return `<div class="g pad"><h2>Storyboard sheet</h2><div class="row sub" style="margin-bottom:8px">Click any text to edit it. Right-click for Change, Edit, Clear.<button class="b o" id="sheetstyle">Style: ${sheetStyle==='bw'?'Black and white print':'Glass'} (switch)</button><button class="b o" id="exsp">Export sheet PDF</button><button class="b o" id="exsn">Export sheet PNG</button></div><div class="sheet ${sheetStyle==='glass'?'glass':''}"><div class="sh-head"><div class="sh-t">${F(`${P}.sheet.title`)}</div><div class="sh-ep"><div>EPISODE: ${F(`${P}.sheet.episode`)}</div><div>MATCH ORDER: ${F(`${P}.sheet.order`)}</div></div></div>${sec}</div></div>`}
+function boardExtras(e,P){const seg=(e.segments||[]).map((x,i)=>`<div class="mslot" style="margin-bottom:10px" data-row="${P}.segments.${i}"><div class="row"><b>${F(`${P}.segments.${i}.title`)}</b><span style="flex:1"></span><button class="b o" data-segrm="${i}">Remove</button></div><textarea data-tp="${P}.segments.${i}.text" style="height:110px;margin-top:8px">${esc(x.text)}</textarea></div>`).join('');
+ const ta=(k,label,ph,h)=>`<div class="g pad"><h2>${label}</h2><textarea data-tp="${P}.${k}" style="height:${h}px" placeholder="${ph}">${esc(e[k]||'')}</textarea></div>`;
+ return sheetView(e,P)+`<div class="g pad"><h2>Segments (non-match angles)</h2>${seg||'<div class="note">No segments yet.</div>'}<button class="b o" id="addseg">+ Add segment</button></div>`+ta('connects','How it connects to other events','Links to earlier and later shows, from your notes only.',110)+ta('notes','Booking notes','Source notes. Plans are not results.',80)+ta('questions','Open questions','Gaps to confirm.',150)}
+function vStory(){const e=cur(),P=E(),win=Core.storyWindow(S,e);
+ return `<div class="g pad"><h1>Story Arc</h1><div class="row sub">Showing ${F(P+'.months','sel')} leading up to ${F(P+'.name')}. Each event links to the one before it. Change the length to filter.</div></div>
+ <div class="g pad"><div class="tl">${win.map((x,i)=>(i?'<div class="link"></div>':'')+`<div class="ev ${x.id===e.id?'c':''}" data-ev="${x.id}"><b>${esc(x.name)}</b><div class="sub">${esc(Core.fmtDate(x.date))}${x.placeholder?' (placeholder)':''}</div><div style="margin-top:6px">${Core.played(x).map(m=>`<div>${esc(m.a||'TBD')} vs ${esc(m.b||'TBD')}${Core.clean(m.beat)?'<div class="note">'+esc(m.beat)+'</div>':''}</div>`).join('')||'<div class="note">No matches entered</div>'}</div></div>`).join('')}</div></div>
+ <div class="g pad"><h2>Where the story stands</h2><div class="sub" style="white-space:pre-wrap">${esc(Core.generateSummary(S,e))}</div></div>`}
+function vTitles(){const rows=S.titles.map((t,i)=>`<tr><td><input value="${esc(t.name)}" data-tf="name" data-ti="${i}"></td><td><select data-tf="slots" data-ti="${i}"><option value="1" ${t.slots==1?'selected':''}>1 holder</option><option value="2" ${t.slots==2?'selected':''}>2 holders (tag)</option></select></td><td>${t.holders.map((_,j)=>F(`titles.${i}.holders.${j}`,'sel')).join(' ')}</td>
+ <td><button class="b o" data-tmv="-1" data-ti="${i}">Up</button> <button class="b o" data-tmv="1" data-ti="${i}">Down</button> <button class="b o" data-trm="${i}">Remove</button></td></tr>`).join('');
+ return `<div class="g pad"><div class="row"><div><h1>Titles and Champions</h1><div class="sub">Add, rename, remove and reorder titles. Pick holders from the roster. Holders are blank until you set them. Titles show up in every match title dropdown.</div></div><div style="flex:1"></div><input id="newtitle" placeholder="New title name"><button class="b" id="addt">+ Add title</button></div></div><div class="g pad"><table><tr><th>Title</th><th>Holders</th><th>Current champion(s)</th><th></th></tr>${rows}</table><div class="note" style="margin-top:10px">Right-click a holder to swap it with another title holder, clear it, or change it.</div></div>`}
+let roleFilter='All';
+function vRoster(){const names=Core.names(S);if(!selW||!names.includes(selW))selW=names[0];const wv=selW?Core.wrestlerView(S,selW):null;
+ const rows=S.roster.map((r,i)=>[r,i]).filter(([r])=>roleFilter==='All'||(r.role||'Wrestler')===roleFilter).map(([r,i])=>`<tr data-rname="${esc(r.name)}"><td><span class="ph" data-sel="${esc(r.name)}" style="${(MEDIA[r.name]&&MEDIA[r.name].promo)?`background:url(${furl(MEDIA[r.name].promo)}) center/cover`:''}">${(MEDIA[r.name]&&MEDIA[r.name].promo)?'':'promo'}</span></td><td><input value="${esc(r.name)}" data-f="name" data-i="${i}"></td><td>${F(`roster.${i}.role`,'sel')}${r.roleNote?`<div class="note">was: ${esc(r.roleNote)}</div>`:''}</td>
+ <td><select data-f="alignment" data-i="${i}">${['','Face','Heel','Tweener'].map(o=>`<option ${o===r.alignment?'selected':''} value="${o}">${o||'Alignment'}</option>`).join('')}</select></td>
+ <td class="sub">${esc(Core.holdersOf(S,r.name).join(', ')||'No title')}</td>
+ <td><button class="b o" data-mv="-1" data-i="${i}">Up</button> <button class="b o" data-mv="1" data-i="${i}">Down</button> <button class="b o" data-rm="${i}">Remove</button> <button class="b o" data-sel="${esc(r.name)}">View</button></td></tr>`).join('');
+ return `<div class="g pad"><div class="row"><div><h1>Roster Manager</h1><div class="sub">Add, rename, remove and reorder. Changes show up in every dropdown right away and are saved with your data and backups.</div></div><div style="flex:1"></div><select id="rolefilter" title="Filter by role">${['All',...S.lists.roles].map(o=>`<option ${o===roleFilter?'selected':''}>${esc(o)}</option>`).join('')}</select><input id="newname" placeholder="New wrestler name"><button class="b" id="addw">+ Add</button></div></div>
+ <div class="two"><div class="g pad"><table><tr><th></th><th>Name</th><th>Role</th><th>Alignment</th><th>Champion</th><th></th></tr>${rows}</table></div>
+ <div class="g pad"><h2>${esc(selW||'')}</h2>${wv?`<div class="sub">Feuds and opponents</div><div style="margin:6px 0 14px">${wv.feuds.map(f=>`<span class="badge s">${esc(f.foe)} x${f.count}</span>`).join('')||'<span class="note">No opponents entered yet.</span>'}</div><div class="sub">Appearances (${wv.appearances.length})</div>${wv.appearances.map(a=>`<div style="margin:6px 0;font-size:13px">${esc(a.event)} <span class="note">${esc(Core.fmtDate(a.date))}</span><br>vs ${esc(a.foe||'TBD')}${a.sample?' <span class="tag">SAMPLE</span>':''}</div>`).join('')||'<div class="note">Not on any card yet.</div>'}`:''}</div></div>
+ ${selW?mediaPanel(selW):''}`}
+function mediaPanel(n){const m=MEDIA[n]||{};const slot=(k,label,f,tag)=>`<div class="mslot" data-drop="${k}" data-mname="${esc(n)}"><div class="sub"><b>${label}</b> ${f?'':'<span class="note">'+(k==='video'&&(S.roster.find(r=>r.name===n)||{}).video?'attach on this Mac (a video was attached on another Mac: '+esc((S.roster.find(r=>r.name===n)||{}).video)+')':'none attached')+'</span>'}${k==='video'?' <span class="note" style="color:#d8a928">local only, not synced</span>':''}</div>${f?tag(furl(f)):''}<div class="row" style="margin-top:6px"><button class="b o" data-mattach="${k}" data-mname="${esc(n)}">${f?'Replace':'Attach'}</button>${f?`<button class="b o" data-mremove="${k}" data-mname="${esc(n)}">Remove</button>`:''}<span class="note">or drop a file here</span></div></div>`;
+ return `<div class="g pad"><h2>Media for ${esc(n)}</h2><div class="note" style="margin-bottom:10px">Files are copied into ${esc((dataPath||'').replace(/[\\/]data\.json$/,'').replace(/^.*[\\/]Documents/,'Documents')+'/roster/'+n)}/ and included in backups.</div><div class="mgrid">
+ ${slot('promo','Promo picture',m.promo,u=>`<img class="mprev" src="${u}">`)}${slot('video','Intro video',m.video,u=>`<video class="mprev" src="${u}" controls preload="metadata"></video>`)}${slot('music','Intro music / entrance song',m.music,u=>`<audio src="${u}" controls preload="metadata" style="width:100%"></audio>`)}</div></div>`}
+
+// ---- poster / match card archive
+let ARCH={events:{},orphans:[]},archYear=null;
+const evYear=e=>/^\d{4}/.test(e.date||'')?e.date.slice(0,4):'Undated',evKey=e=>({id:e.id,date:e.date,name:e.name});
+async function refreshArchive(){try{ARCH=await window.sb.archiveAll(S.events.map(evKey))}catch(e){ARCH={events:{},orphans:[]}}if(view==='archive')draw()}
+const isPdf=f=>/\.pdf$/i.test(f),bn=f=>String(f).split(/[\\/]/).pop();
+function archTiles(fs,ev,kind){return fs.map(f=>`<div class="athumb">${isPdf(f)?`<div class="pdft" data-aopen="${esc(f)}">PDF</div>`:`<img src="${furl(f)}" data-aopen="${esc(f)}" loading="lazy">`}<div class="note" title="${esc(bn(f))}">${esc(bn(f))}</div><div class="row"><button class="b o" data-areplace="${esc(f)}" data-aev="${ev?ev.id:''}" data-akind="${kind}">Replace</button><button class="b o" data-aremove="${esc(f)}">Remove</button></div></div>`).join('')}
+function archZone(ev,kind,label,fs){return `<div class="mslot" data-adrop="${kind}" data-aev="${ev.id}"><div class="sub"><b>${label}</b> <span class="note">${fs.length?fs.length+' file'+(fs.length>1?'s':''):'none'}</span></div><div class="agrid">${archTiles(fs,ev,kind)}</div><div class="row" style="margin-top:6px"><button class="b o" data-aattach="${kind}" data-aev="${ev.id}">Attach</button><span class="note">or drop images / PDF here</span></div></div>`}
+function vArchive(){const evs=Core.sortEvents?Core.sortEvents(S.events):S.events.slice();const years=[...new Set([...evs.map(evYear),...(ARCH.orphans||[]).map(o=>o.year)])].sort().reverse();
+ if(!archYear||!years.includes(archYear))archYear=years.find(y=>y===String(new Date().getFullYear()))||years[0];
+ const ye=evs.filter(e=>evYear(e)===archYear);const orph=(ARCH.orphans||[]).filter(o=>o.year===archYear);const c=cur();
+ return `<div class="g pad"><h2>Archive: posters and match cards</h2><div class="note" style="margin-bottom:10px">Stored in Documents/Ark-Book/archive/&lt;year&gt;/&lt;MM-DD event&gt;/posters and matchcards. Images and PDF only (no videos). Files over 50 MB are kept here but not synced. Synced between Macs like promo pictures.</div>
+ <div class="row" style="margin-bottom:10px">${years.map(y=>`<button class="b ${y===archYear?'':'o'}" data-ayear="${y}">${y}</button>`).join('')}<span class="sp"></span><button class="b o" data-azip="${archYear}">Export ${archYear} as zip</button></div>
+ <div class="row" style="margin-bottom:12px"><span class="note">Save the current event's export into the archive (${esc(c.name)}):</span><button class="b o" data-asave="png|matchcards">Match card PNG</button><button class="b o" data-asave="pdf|matchcards">Match card PDF</button><button class="b o" data-asave="sheetpng|matchcards">Storyboard sheet PNG</button><button class="b o" data-asave="sheetpdf|matchcards">Storyboard sheet PDF</button></div>
+ ${ye.map(ev=>{const l=ARCH.events[ev.id]||{posters:[],matchcards:[]};return `<div class="g pad" style="margin-bottom:12px"><div class="row"><h3 style="margin:0">${esc(ev.name)}</h3><span class="note">${esc(ev.date||'no date')}</span><span class="sp"></span><button class="b o" data-areveal="${ev.id}">Open folder</button></div><div class="mgrid" style="grid-template-columns:1fr 1fr">${archZone(ev,'posters','Posters',l.posters)}${archZone(ev,'matchcards','Match cards',l.matchcards)}</div></div>`}).join('')||'<div class="note">No events in '+archYear+'.</div>'}
+ ${orph.length?`<div class="g pad"><h3>Folders on disk with no matching event</h3>${orph.map(o=>`<div class="sub"><b>${esc(o.folder)}</b></div><div class="agrid">${archTiles([...o.posters,...o.matchcards],null,'')}</div>`).join('')}</div>`:''}</div>`}
+async function archAttach(evId,kind,src,replaceFp){const ev=S.events.find(e=>e.id===evId);if(!ev)return;const r=await window.sb.archiveAttach(evKey(ev),kind,src||null,replaceFp||null);if(r.error)return toast(r.error);if(r.canceled)return;toast(r.results.every(x=>x.duplicate)?'Already in the archive (same file), nothing added':'Added to the archive');refreshArchive()}
+// ---- events
+document.addEventListener('click',e=>{const t=e.target;
+ if(t.dataset.tab){view=t.dataset.tab;if(view==='archive')refreshArchive();return draw()}
+ if(t.dataset.ayear){archYear=t.dataset.ayear;return draw()}
+ if(t.dataset.aattach)return archAttach(t.dataset.aev,t.dataset.aattach);
+ if(t.dataset.areplace)return archAttach(t.dataset.aev,t.dataset.akind,null,t.dataset.areplace);
+ if(t.dataset.aremove){if(confirm('Remove '+bn(t.dataset.aremove)+' from the archive? The file will be deleted from this Mac and from sync.'))window.sb.archiveRemove(t.dataset.aremove).then(()=>refreshArchive());return}
+ if(t.dataset.aopen)return window.sb.archiveOpen(t.dataset.aopen);
+ if(t.dataset.areveal){const ev=S.events.find(x=>x.id===t.dataset.areveal);return ev&&window.sb.archiveReveal(evKey(ev))}
+ if(t.dataset.azip)return window.sb.archiveZipYear(t.dataset.azip).then(r=>{if(r.error)toast(r.error);else if(r.path)toast('Exported to '+r.path)});
+ if(t.dataset.asave){const [k,ak]=t.dataset.asave.split('|');return window.sb.archiveSaveExport(k,S,cur().id,ak).then(r=>{if(r.error)toast(r.error);else{toast(r.duplicate?'Same file already in the archive':'Saved into the archive');refreshArchive()}})}
+
+ const cm=t.closest('#cm');if(cm){return}
+ if(t.id==='addseg')return mut(()=>{const ev=cur();ev.segments=ev.segments||[];ev.segments.push({id:Core.uid(),title:'New segment',text:''})});
+ if(t.dataset.segrm!==undefined)return mut(()=>{cur().segments.splice(+t.dataset.segrm,1)});
+ if(t.dataset.goev){const x=S.events.find(v=>v.name===t.dataset.goev);if(x){e.preventDefault();S.currentId=x.id;view='board';draw()}return}
+ if(t.id==='sheetstyle'){sheetStyle=sheetStyle==='bw'?'glass':'bw';return draw()}
+ if(['exsp','exsn'].includes(t.id))return window.sb.exportEvent({exsp:'sheetpdf',exsn:'sheetpng'}[t.id],S,cur().id).then(p=>p&&toast('Exported to '+p));
+ if(t.dataset.boxrm!==undefined){const [si,bi]=t.dataset.boxrm.split('.').map(Number);if(confirm('Remove this step box?'))mut(()=>{cur().sheet.sections[si].boxes.splice(bi,1)});return}
+ if(t.dataset.boxadd!==undefined)return mut(()=>{const sc=cur().sheet.sections[+t.dataset.boxadd];const n=sc.boxes.filter(b=>b.kind!=='result').length+1;sc.boxes.splice(Math.max(0,sc.boxes.length-(sc.boxes.some(b=>b.kind==='result')?1:0)),0,{id:Core.uid(),code:sc.num+'.'+n,title:'NEW STEP',label:'Action',kind:'step',text:'- '})});
+ if(t.id==='newev')return mut(()=>{const n=Core.blankEvent({name:'New Event'});S.events.push(n);S.currentId=n.id;view='board'});
+ if(t.id==='addm')return mut(()=>cur().matches.push(Core.blankMatch()));
+ if(t.id==='gen')return mut(()=>{const ev=cur();if(ev.summary.text&&!confirm('Replace the current summary text with a new draft? You can undo.'))throw new Error('Cancelled');ev.summary.text=Core.generateSummary(S,ev)});
+ if(['exmd','expng','expdf'].includes(t.id))return window.sb.exportEvent({exmd:'md',expng:'png',expdf:'pdf'}[t.id],S,cur().id).then(p=>p&&toast('Exported to '+p));
+ if(t.id==='addt'){const v=$('#newtitle').value;return mut(()=>Core.titleAdd(S,v))}
+ if(t.dataset.trm!==undefined)return mut(()=>{const n=S.titles[+t.dataset.trm].name;if(!confirm('Remove the '+n+' title? Matches using it will be cleared. You can undo.'))throw new Error('Cancelled');Core.titleRemove(S,n)});
+ if(t.dataset.tmv)return mut(()=>Core.titleMove(S,S.titles[+t.dataset.ti].name,+t.dataset.tmv));
+ if(t.id==='addw'){const v=$('#newname').value;return mut(()=>Core.rosterAdd(S,v))}
+ if(t.dataset.rm!==undefined)return removeWrestler(S.roster[+t.dataset.rm].name);
+ if(t.dataset.mv)return mut(()=>Core.rosterMove(S,S.roster[+t.dataset.i].name,+t.dataset.mv));
+ if(t.dataset.sel){selW=t.dataset.sel;return draw()}
+
+ if(t.dataset.mattach)return attachMedia(t.dataset.mname,t.dataset.mattach);
+ if(t.dataset.mremove)return window.sb.mediaRemove(t.dataset.mname,t.dataset.mremove).then(()=>{if(t.dataset.mremove==='video'){const p=S.roster.find(r=>r.name===t.dataset.mname);if(p){p.video='';Core.stamp(S);save()}}refreshMedia()});
+ const ev=t.closest('[data-ev]');if(ev&&!t.closest('[data-k]')){S.currentId=ev.dataset.ev;view=view==='story'?'story':'board';save();return draw()}
+ const f=t.closest('[data-k]');if(f&&!LISTOF(f.dataset.k)&&!f.dataset.k.startsWith('lists.')){ctx={p:f.dataset.k};place(e.clientX,e.clientY);return editView()}
+ if(f&&LISTOF(f.dataset.k)){ctx={p:f.dataset.k};place(e.clientX,e.clientY);return listView('Change')}
+ hide()});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset.tf){const ti=S.titles[+t.dataset.ti];return mut(()=>t.dataset.tf==='name'?Core.titleRename(S,ti.name,t.value):Core.titleSlots(S,ti.name,+t.value))}
+ if(t.id==='dt')return mut(()=>{cur().date=t.value;cur().placeholder=cur().placeholder});
+ if(t.dataset.f&&t.dataset.i!==undefined){const i=+t.dataset.i,r=S.roster[i],f=t.dataset.f;
+  if(f==='name'){const old=r.name;mut(()=>Core.rosterRename(S,old,t.value));if(old!==t.value.trim()&&Core.names(S).includes(t.value.trim()))window.sb.mediaRename(old,t.value.trim()).then(x=>{if(x&&x.error)toast(x.error);refreshMedia()});return}
+  return mut(()=>{r[f]=t.value})}});
+document.addEventListener('change',e=>{if(e.target.id==='rolefilter'){roleFilter=e.target.value;draw()}});
+document.addEventListener('input',e=>{if(e.target.id==='sum'){cur().summary.text=e.target.value;Core.stamp(S);save()}if(e.target.dataset&&e.target.dataset.tp){set(e.target.dataset.tp,e.target.value);Core.stamp(S);save()}});
+document.addEventListener('focusin',e=>{if(e.target.dataset&&e.target.dataset.tp)snap()});
+async function attachMedia(n,kind,src){const r=await window.sb.mediaAttach(n,kind,src);if(r.error)return toast(r.error);if(r.canceled)return;toast('Attached '+kind+' for '+n);refreshMedia()}
+async function removeWrestler(n){const has=await window.sb.mediaHas(n);const msg='Remove '+n+' from the roster? Their match slots will be cleared.'+(has?' Their media folder (promo, intro video, music) will be moved to the Trash.':'')+' You can undo the roster change.';if(!confirm(msg))return;mut(()=>Core.rosterRemove(S,n));if(has)await window.sb.mediaTrash(n);refreshMedia()}
+document.addEventListener('dragover',e=>{if(e.target.closest&&e.target.closest('[data-drop]')){e.preventDefault()}});
+document.addEventListener('dragover',e=>{if(e.target.closest&&e.target.closest('[data-adrop]'))e.preventDefault()});
+document.addEventListener('drop',e=>{const az=e.target.closest&&e.target.closest('[data-adrop]');if(az){e.preventDefault();const fl=[...e.dataTransfer.files];(async()=>{for(const f of fl)await archAttach(az.dataset.aev,az.dataset.adrop,window.sb.pathForFile(f))})();return}const z=e.target.closest&&e.target.closest('[data-drop]');if(!z)return;e.preventDefault();const f=e.dataTransfer.files[0];if(f)attachMedia(z.dataset.mname,z.dataset.drop,window.sb.pathForFile(f))});
+function pickPhoto(i){const inp=document.createElement('input');inp.type='file';inp.accept='image/*';inp.onchange=()=>{const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=c.height=96;const x=c.getContext('2d'),s=Math.min(im.width,im.height);x.drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,96,96);mut(()=>{S.roster[i].photo=c.toDataURL('image/jpeg',.8)})};im.src=fr.result};fr.readAsDataURL(inp.files[0])};inp.click()}
+// ---- context menu
+const cmEl=$('#cm');let ctx=null;const hide=()=>{cmEl.style.display='none'};
+function place(x,y){cmEl.style.display='block';cmEl.style.left=Math.min(x,innerWidth-250)+'px';cmEl.style.top=Math.min(y,innerHeight-360)+'px'}
+const it=(a,t,x='')=>`<div class="it" data-a="${a}" ${x}>${t}</div>`;
+document.addEventListener('contextmenu',e=>{const f=e.target.closest('[data-k]'),r=e.target.closest('[data-row]'),c=e.target.closest('.card,.ev'),rr=e.target.closest('[data-rname]');if(!f&&!r&&!c&&!rr)return hide();e.preventDefault();ctx={p:f&&f.dataset.k,row:r&&r.dataset.row,ev:c&&c.dataset.ev,rname:rr&&rr.dataset.rname};let h='';
+ if(ctx.p){const l=LISTOF(ctx.p);h+=`<div class="hd">${esc(ctx.p.split('.').pop())}</div>`+(l?it('change','Change ...'):'')+it('edit','Edit text ...');if(/matches\.\d+\.[a-z]+$|^titles\.\d+\.holders\.\d+$/.test(ctx.p))h+=it('swap','Swap with ...');h+=it('clear','Clear');if(l)h+=it('add','Add custom ...')}
+ if(ctx.row)h+=(h?'<hr>':'')+'<div class="hd">match row</div>'+it('rswap','Swap row with ...')+it('rclear','Clear row')+it('rremove','Remove row')+it('radd','Add row below');
+ if(ctx.ev)h+=(h?'<hr>':'')+'<div class="hd">event</div>'+it('open','Open')+it('evdup','Duplicate')+it('evdel','Delete');
+ if(ctx.rname)h+=(h?'<hr>':'')+'<div class="hd">wrestler</div>'+it('wrm','Remove from roster')+it('wview','View feuds');
+ place(e.clientX,e.clientY);cmEl.innerHTML=h});
+const LONG=p=>/\.(note|text|order)$/.test(p);
+function editView(){const p=ctx.p;cmEl.dataset.mode='edit';cmEl.innerHTML=`<div class="hd">Edit text${LONG(p)?' (Cmd+Enter to save)':''}</div>`+(LONG(p)?`<textarea id="ci" style="width:420px;height:200px">${esc(get(p)||'')}</textarea>`:`<input id="ci" value="${esc(get(p)||'')}">`);ci.focus()}
+function listView(mode){const l=LISTOF(ctx.p),o=optsOf(l);cmEl.dataset.mode=mode;cmEl.innerHTML=`<div class="hd">${mode}</div><div class="sc">`+o.map((x,i)=>it('pick',esc(disp(ctx.p,x)),`data-i="${i}"`)).join('')+`</div><hr><input id="ci" placeholder="Add custom, press Enter">`;ci.focus()}
+function swapView(row){const c=[];if(!row&&/^titles\.\d+\.holders\.\d+$/.test(ctx.p)){S.titles.forEach((t,i)=>t.holders.forEach((h,j)=>{const q=`titles.${i}.holders.${j}`;if(q!==ctx.p)c.push([q,t.name+(t.slots>1?' #'+(j+1):'')+': '+(h||'empty')])}));cmEl.dataset.mode='swap';cmEl.innerHTML='<div class="hd">Swap with</div><div class="sc">'+c.map(x=>it('doswap',esc(x[1]),`data-q="${x[0]}"`)).join('')+'</div>';return}if(row){const ev=cur();ev.matches.forEach((m,i)=>{if(`${E()}.matches.${i}`!==ctx.row)c.push([`${E()}.matches.${i}`,'Match '+(i+1)+': '+(m.a||'TBD')+' vs '+(m.b||'TBD')])})}
+ else{const f=ctx.p.split('.').pop();cur().matches.forEach((m,i)=>{['a','b'].forEach(k=>{const q=`${E()}.matches.${i}.${k}`;if((f==='a'||f==='b')?(k===('a'===f||'b'===f?k:f)&&q!==ctx.p):false)c.push([q,`Match ${i+1} ${k==='a'?'left':'right'}: ${m[k]||'empty'}`])});if(f!=='a'&&f!=='b'){const q=`${E()}.matches.${i}.${f}`;if(q!==ctx.p)c.push([q,`Match ${i+1}: ${m[f]||'empty'}`])}})}
+ cmEl.dataset.mode=row?'rowswap':'swap';cmEl.innerHTML='<div class="hd">Swap with</div><div class="sc">'+c.map(x=>it('doswap',esc(x[1]),`data-q="${x[0]}"`)).join('')+'</div>'}
+const blankRow=()=>Core.blankMatch();
+cmEl.addEventListener('click',e=>{const el=e.target.closest('.it');if(!el)return;e.stopPropagation();const a=el.dataset.a,p=ctx.p,row=ctx.row;
+ if(a==='change')return listView('Change');if(a==='add')return listView('Add custom');if(a==='edit'){editView();return}
+ if(a==='swap')return swapView(false);if(a==='rswap')return swapView(true);
+ const ev=ctx.ev;
+ mut(()=>{
+  if(a==='pick'){const l=LISTOF(p),v=optsOf(l)[+el.dataset.i];setField(p,v)}
+  if(a==='clear')setField(p,'');
+  if(a==='doswap'){const q=el.dataset.q;if(cmEl.dataset.mode==='rowswap'){const i=+row.split('.').pop(),j=+q.split('.').pop(),M=cur().matches;[M[i],M[j]]=[M[j],M[i]]}else{const t=get(p);set(p,get(q));set(q,t)}}
+  if(a==='rclear'){const i=+row.split('.').pop();cur().matches[i]=blankRow()}
+  if(a==='rremove'){cur().matches.splice(+row.split('.').pop(),1)}
+  if(a==='radd'){cur().matches.splice(+row.split('.').pop()+1,0,blankRow())}
+  if(a==='open'){S.currentId=ev;view='board'}
+  if(a==='evdup'){const o=S.events.find(x=>x.id===ev),c=JSON.parse(JSON.stringify(o));c.id=Core.uid();c.name=o.name+' (copy)';c.matches.forEach(m=>m.id=Core.uid());S.events.push(c);S.currentId=c.id}
+  if(a==='evdel'){if(S.events.length<2)throw new Error('Keep at least one event');if(!confirm('Delete this event? You can undo.'))throw new Error('Cancelled');S.events=S.events.filter(x=>x.id!==ev);if(!S.events.find(x=>x.id===S.currentId))S.currentId=S.events[0].id}
+  if(a==='wrm'){hide();return removeWrestler(ctx.rname)}
+  if(a==='wview'){selW=ctx.rname;view='roster'}
+ });hide()});
+function setField(p,v){const l=p.split('.').pop();if(l==='winner'){const mp=p.replace(/\.winner$/,''),m=get(mp);Core.applyWinner(m,v);const o=Core.titleOffer(S,m);if(o){if(o.slots>1)toast('Tag title: update the champions on the Titles tab if they won it.');else if(confirm(m.winner+' won the '+o.title+'. Make '+m.winner+' the new champion?')){S.titles.find(t=>t.name===o.title).holders[0]=m.winner}}return}if(l==='kind'){set(p,v==='Annual Cycle'?'annual':'special')}else if(l==='months')set(p,+v);else set(p,v)}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')return hide();
+ if((e.metaKey||e.ctrlKey)&&e.key==='z'&&!['INPUT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();return undo()}
+ if(e.key==='Enter'&&document.activeElement&&document.activeElement.id==='ci'&&(document.activeElement.tagName!=='TEXTAREA'||e.metaKey||e.ctrlKey)){const v=ci.value.trim();if(!v)return;const m=cmEl.dataset.mode,p=ctx.p;
+  mut(()=>{if(m==='edit'){if(/^lists\./.test(p))set(p,v);else if(p.split('.').pop()==='months'||p.endsWith('kind'))setField(p,v);else set(p,v)}else{const l=LISTOF(p);if(l==='roster'){if(!Core.names(S).includes(v))Core.rosterAdd(S,v)}else if(l==='titles'){if(!Core.titleNames(S).includes(v))Core.titleAdd(S,v)}else if(S.lists[l]&&!S.lists[l].includes(v))S.lists[l].push(v);setField(p,v)}});hide()}});
+$('#undo').onclick=undo;$('#bdir').onclick=()=>window.sb.openFolder();
+$('#bexp').onclick=()=>window.sb.backupExport(S).then(p=>p&&toast('Backup saved (with media): '+p));
+$('#bimp').onclick=async()=>{const r=await window.sb.backupImport();if(!r)return;if(r.error)return toast('Import failed: '+r.error);if(!confirm('Replace all current data with this backup? You can undo.'))return;mut(()=>{S=Core.validate(r.data)});refreshMedia()};
+function showSync(st){const e=$('#sync');if(!e||!st)return;const c={synced:'#7fe08a',syncing:'#d8a928',offline:'#e0a050',error:'#e86a6a',off:'#a9a399',idle:'#a9a399'}[st.state]||'#a9a399';
+ e.innerHTML=`<span style="color:${c}">&#9679;</span> ${esc(({synced:'Synced',syncing:'Syncing...',offline:'Offline',error:'Sync error',off:'Sync off',idle:'Sync ready'})[st.state]||st.state)}${st.last?' '+new Date(st.last).toLocaleTimeString():''}<div>${esc(st.msg||'')}</div>${(st.warnings||[]).map(w=>'<div style="color:#e0a050">'+esc(w)+'</div>').join('')}`}
+$('#syncnow').onclick=()=>window.sb.syncNow();
+window.sb.onSync(async e=>{if(e.type==='status')return showSync(e.status);if(e.type==='media'){refreshMedia();refreshArchive();return}if(e.type==='applied'){const r=await window.sb.load();if(r.data){const incoming=Core.validate(r.data);Core.alignIds(S,incoming);Core.stamp(S);const m=Core.mergeData(S,incoming);snap();S=Core.validate(m.data);Core.stamp(S);save();refreshMedia();toast('Updated from the other Mac')}}});
+(async()=>{const r=await window.sb.load();dataPath=r.path;S=r.data?Core.validate(r.data):Core.seed();Core.stamp(S);if(S.pendingMediaRenames){for(const [o,n] of S.pendingMediaRenames){try{const x=await window.sb.mediaRename(o,n);if(x&&x.error)toast('Kept both media folders for '+o+' and '+n)}catch(e){}}delete S.pendingMediaRenames;Core.stamp(S);r.migrated=true}try{const b=await window.sb.board('thriller-board');if(b){const res=Core.applyBoard(S,b);if(res.applied){Core.stamp(S);save();toast('Loaded the Thriller booking notes')}}}catch(e){}showSync(await window.sb.syncStatus());if(!r.data||r.migrated)await window.sb.save(S);$('#status').textContent='Data: '+dataPath.replace(/^.*\/Documents/,'~/Documents');refreshMedia()})();
+
+// touch devices: long-press = right-click (opens the same context menu); the tap that follows a long-press is swallowed
+(()=>{if(!('ontouchstart' in window))return;let t=null,sx=0,sy=0,fired=0;const SEL='[data-k],[data-row],.card,.ev,[data-rname]';
+ document.addEventListener('touchstart',e=>{const el=e.target.closest&&e.target.closest(SEL);if(!el||e.touches.length!==1)return;const x=e.touches[0].clientX,y=e.touches[0].clientY;sx=x;sy=y;clearTimeout(t);t=setTimeout(()=>{fired=Date.now();if(navigator.vibrate)try{navigator.vibrate(15)}catch(_){}el.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:x,clientY:y}))},550)},{passive:true});
+ const cancel=()=>clearTimeout(t);document.addEventListener('touchend',cancel,{passive:true});document.addEventListener('touchcancel',cancel,{passive:true});
+ document.addEventListener('touchmove',e=>{const q=e.touches[0];if(Math.abs(q.clientX-sx)>10||Math.abs(q.clientY-sy)>10)cancel()},{passive:true});
+ document.addEventListener('click',e=>{if(fired&&Date.now()-fired<900){e.stopPropagation();e.preventDefault();fired=0}},true);})();
