@@ -11,7 +11,16 @@ const slug=x=>String(x).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/
 const defTitles=()=>[{id:'t-undisputed',name:'Undisputed Championship',slots:1,holders:['Rico Bravo']},{id:'t-openweight',name:'Openweight Championship',slots:1,holders:['BK Bennett']},{id:'t-womens',name:"Women's Championship",slots:1,holders:['']},{id:'t-tag',name:'Tag Team Championship',slots:2,holders:['','']}];
 const titleNames=d=>d.titles.map(t=>t.name);
 const holdersOf=(d,name)=>d.titles.filter(t=>t.holders.includes(name)).map(t=>t.name);
-const blankMatch=()=>({id:uid(),a:'',b:'',type:'',title:'',result:'',beat:'',note:'',winner:'',method:'',winnerPlanned:false,sample:false,planned:false});
+// match types with more than two people: Triple Threat (3 singles), Fatal 4-Way (4 singles), Six Man Tag (2 teams of 3). Extra slots c,d (singles) and a2,a3,b2,b3 (team partners).
+const XKEYS=['c','d','a2','a3','b2','b3'],PKEYS=['a','b'].concat(XKEYS);
+const MTYPES=['Triple Threat','Fatal 4-Way','Six Man Tag'];
+const mtKind=t=>{const n=norm(t);return /triplethreat|3way|threeway/.test(n)?'triple':/fatal4way|fatalfourway|4way|fourway/.test(n)?'fatal4':/sixmantag|6mantag|sixman|6man/.test(n)?'six':'std'};
+const sideKeys=m=>({triple:[['a'],['b'],['c']],fatal4:[['a'],['b'],['c'],['d']],six:[['a','a2','a3'],['b','b2','b3']]})[mtKind(m.type)]||[['a'],['b']];
+const sides=m=>sideKeys(m).map(ks=>ks.map(k=>m[k]||''));
+const sideLabel=s=>{if(!s.some(Boolean))return 'TBD';const x=s.map(v=>v||'TBD');return x.length<2?x[0]:x.slice(0,-1).join(', ')+' and '+x[x.length-1]};
+const participants=m=>sides(m).flat().filter(Boolean);
+const vsLine=m=>sides(m).map(sideLabel).join(' vs ');
+const blankMatch=()=>({id:uid(),a:'',b:'',c:'',d:'',a2:'',a3:'',b2:'',b3:'',type:'',title:'',result:'',beat:'',note:'',winner:'',method:'',winnerPlanned:false,sample:false,planned:false});
 const blankEvent=(o={})=>Object.assign({id:uid(),kind:'special',cycleMonth:'',segments:[],notes:'',connects:'',questions:'',name:'New Event',date:'',venue:'',months:6,placeholder:false,matches:[1,2,3,4,5].map(blankMatch),summary:{tpl:'Standard recap (placeholder)',text:''}},o);
 function seed(){
  const pairs=[["Rico Bravo","BK Bennett"],["KJ Valentine","Cory James"],["Troy Carter","Christian Garrett"],["Zach Dye","Diamond Roberts"],["Roxxi Redd","The CTC"]];
@@ -22,7 +31,7 @@ function seed(){
  const evs=cyc.map(c=>c?ph(c[0],c[1],'annual',c[2]):nov);
  evs.push(ph("Let's Go Aiden",'2026-10-24','special'),ph('Throw Down in T-Town','2026-11-07','special'));
  return {version:1,roster:ROSTER.map(n=>person(n,{id:'p-'+slug(n)})),titles:defTitles(),
-  lists:{roles:ROLES.slice(),types:["Singles","Tag Team","Triple Threat","Street Fight","Ladder Match","Battle Royal"],
+  lists:{roles:ROLES.slice(),types:["Singles","Tag Team","Triple Threat","Fatal 4-Way","Six Man Tag","Street Fight","Ladder Match","Battle Royal"],
   methods:["Pinfall","Submission","DQ","Count-out","Knockout","Referee stoppage","Other"],results:["Result: TBD","Finish: pinfall","Finish: submission","Finish: DQ","Finish: no contest"],beats:["Story beat: placeholder","Feud begins","Rivalry continues","Blow off","Alliance forms","Betrayal","Title chase"],
   venues:["Summerville, GA (venue to be confirmed)","40 Middle School Rd, Summerville GA"],templates:["Standard recap (placeholder)","Short recap (placeholder)","Story focused recap (placeholder)"]},
   events:evs,bookings:[],currentId:nov.id};}
@@ -32,19 +41,19 @@ const sortEvents=evs=>evs.slice().sort((a,b)=>(a.date||'9999').localeCompare(b.d
 function storyWindow(data,ev,months){const m=months||ev.months||6;const all=sortEvents(data.events);if(!ev.date)return all.filter(e=>e.id===ev.id);
  const t=new Date(ev.date+'T12:00:00');t.setMonth(t.getMonth()-m);const from=t.toISOString().slice(0,10);
  return all.filter(e=>e.date&&e.date>=from&&e.date<=ev.date);}
-const played=ev=>ev.matches.filter(m=>m.a||m.b);
+const played=ev=>ev.matches.filter(m=>participants(m).length);
 function wrestlerView(data,name){const rows=[];const foes={};
- sortEvents(data.events).forEach(e=>played(e).forEach(m=>{if(m.a===name||m.b===name){const foe=m.a===name?m.b:m.a;rows.push({event:e.name,date:e.date,foe,type:m.type,title:m.title,result:m.result,winner:m.winner,method:m.method,beat:m.beat,sample:m.sample});if(foe)foes[foe]=(foes[foe]||0)+1}}));
+ sortEvents(data.events).forEach(e=>played(e).forEach(m=>{const sd=sides(m),mi=sd.findIndex(x=>x.includes(name));if(mi<0)return;const others=sd.filter((_,i)=>i!==mi);const partners=sd[mi].filter(x=>x&&x!==name);const foe=others.map(sideLabel).join(' vs ');rows.push({event:e.name,date:e.date,foe,partners,type:m.type,title:m.title,result:m.result,winner:m.winner,method:m.method,beat:m.beat,sample:m.sample});others.flat().filter(Boolean).forEach(f=>{foes[f]=(foes[f]||0)+1})}));
  return {name,appearances:rows,feuds:Object.entries(foes).sort((x,y)=>y[1]-x[1]).map(([foe,count])=>({foe,count}))};}
 const NOWIN=['Draw','No Contest'];
-function winnerOpts(m){const o=['TBD (clear)'];[m.a,m.b].filter(Boolean).forEach(x=>o.push(x));o.push('Draw','No Contest');[m.a,m.b].filter(Boolean).forEach(x=>o.push('DQ win: '+x));return o}
+function winnerOpts(m){const o=['TBD (clear)'],L=sides(m).filter(x=>x.some(Boolean)).map(sideLabel);L.forEach(x=>o.push(x));o.push('Draw','No Contest');L.forEach(x=>o.push('DQ win: '+x));return o}
 function applyWinner(m,v){if(v==='TBD (clear)'||v===''){m.winner='';m.method='';}else if(/^DQ win: /.test(v)){m.winner=v.slice(8);m.method='DQ'}else{m.winner=v;if(NOWIN.includes(v))m.method=''}m.winnerPlanned=false}
 function resultText(m){if(!m.winner)return '';const p=m.winnerPlanned?' (planned, not a result)':'';if(NOWIN.includes(m.winner))return m.winner+p;return m.winner+' wins'+(m.method?' by '+m.method:'')+p}
 // title change offer: returns {title,slots} when the winner is a participant, a title is at stake, winner is not already holder, and the finish was clean (not DQ/count-out)
-function titleOffer(d,m){if(!m.winner||m.winnerPlanned||NOWIN.includes(m.winner)||!m.title||/^(DQ|Count-out)$/.test(m.method||''))return null;if(m.winner!==m.a&&m.winner!==m.b)return null;const t=d.titles.find(x=>x.name===m.title);if(!t||t.holders.includes(m.winner))return null;return {title:t.name,slots:t.slots||1}}
+function titleOffer(d,m){if(!m.winner||m.winnerPlanned||NOWIN.includes(m.winner)||!m.title||/^(DQ|Count-out)$/.test(m.method||''))return null;const ws=sides(m).find(x=>x.some(Boolean)&&sideLabel(x)===m.winner);if(!ws||ws.filter(Boolean).length>1)return null;const t=d.titles.find(x=>x.name===m.title);if(!t||t.holders.includes(m.winner))return null;return {title:t.name,slots:t.slots||1}}
 const clean=s=>s&&!/^(Result: TBD|Story beat: placeholder|No title)$/.test(s)?s:'';
 const kindLabel=e=>e.kind==='annual'?'Annual Cycle':'Special Event';
-function matchLine(m,i){const t=[clean(m.type),clean(m.title)].filter(Boolean).join(', ');return `${i+1}. ${m.a||'TBD'} vs ${m.b||'TBD'}${t?' ('+t+')':''}${m.sample?' [SAMPLE pairing, not booked]':''}${m.planned?' [PLANNED from booking notes, not a result]':''}`}
+function matchLine(m,i){const t=[clean(m.type),clean(m.title)].filter(Boolean).join(', ');return `${i+1}. ${vsLine(m)}${t?' ('+t+')':''}${m.sample?' [SAMPLE pairing, not booked]':''}${m.planned?' [PLANNED from booking notes, not a result]':''}`}
 function generateSummary(data,ev){
  const L=[];const tpl=ev.summary.tpl||'';const short=/^Short/.test(tpl),story=/^Story/.test(tpl);
  L.push(`${ev.name}, ${fmtDate(ev.date)}${ev.venue?' at '+ev.venue:''}.`);
@@ -54,8 +63,8 @@ function generateSummary(data,ev){
  const missing=ms.filter(m=>!clean(m.result)&&!m.winner).length;
  if(ms.length)L.push(missing?`Results: ${ms.length-missing} of ${ms.length} entered. Remaining results to be entered, nothing is assumed.`:'Results: all entered above.');
  if(!short){const evs=sortEvents(data.events),ix=evs.findIndex(e=>e.id===ev.id),pv=ix>0?evs.slice(0,ix).reverse().find(e=>e.matches.some(m=>m.winner)):null;
-  if(pv){L.push('Carry-over from '+pv.name+':');pv.matches.filter(m=>m.winner).forEach(m=>L.push('- '+(m.a||'TBD')+' vs '+(m.b||'TBD')+': '+resultText(m)))}
-  const beats=ms.filter(m=>clean(m.beat)).map(m=>`${m.a||'TBD'} vs ${m.b||'TBD'}: ${m.beat}`);
+  if(pv){L.push('Carry-over from '+pv.name+':');pv.matches.filter(m=>m.winner).forEach(m=>L.push('- '+vsLine(m)+': '+resultText(m)))}
+  const beats=ms.filter(m=>clean(m.beat)).map(m=>`${vsLine(m)}: ${m.beat}`);
   if(beats.length){L.push('Story this show:');beats.forEach(b=>L.push('- '+b))}
   const win=storyWindow(data,ev).filter(e=>e.id!==ev.id);
   if(win.length)L.push('Story so far (last '+ev.months+' months): '+win.map(e=>e.name+(e.placeholder?' (placeholder)':'')).join(' > ')+' > '+ev.name+'.');
@@ -76,7 +85,7 @@ function toHTML(data,ev,logo){const ms=played(ev),win=storyWindow(data,ev);
 .s{color:#d5d0c7;font-size:14px}.y{color:#d8a928}.m{display:flex;gap:12px;align-items:center;padding:10px 0;border-top:1px solid rgba(255,255,255,.1);font-size:16px}.n{width:30px;height:30px;border-radius:50%;background:#d8a928;color:#080808;font-weight:800;display:grid;place-items:center;flex:none}
 .sm{font-size:12px;color:#d5d0c7}.tl{display:flex;gap:8px;flex-wrap:wrap}.e{padding:8px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);font-size:13px}.e.c{border-color:#d8a928;color:#d8a928}pre{white-space:pre-wrap;font:14px/1.5 inherit;margin:0}</style></head><body>
 <div class="g" style="display:flex;gap:18px;align-items:center">${logo?`<img src="${logo}" style="height:64px">`:''}<div><h1>${esc(ev.name)}</h1><div class="s">${esc(fmtDate(ev.date))}${ev.venue?' | '+esc(ev.venue):''}</div></div></div>
-<div class="g"><h2>Match Card</h2>${ms.length?ms.map((m,i)=>`<div class="m"><div class="n">${i+1}</div><div><b>${esc(m.a||'TBD')}</b> <span class="y">vs</span> <b>${esc(m.b||'TBD')}</b><div class="sm">${esc([clean(m.type),clean(m.title),clean(m.result),resultText(m),clean(m.beat)].filter(Boolean).join(' | '))}${m.sample?' SAMPLE pairing, not booked':''}</div></div></div>`).join(''):'<div class="s">No matches entered yet.</div>'}</div>
+<div class="g"><h2>Match Card</h2>${ms.length?ms.map((m,i)=>`<div class="m"><div class="n">${i+1}</div><div>${sides(m).map(x=>`<b>${esc(sideLabel(x))}</b>`).join(' <span class="y">vs</span> ')}<div class="sm">${esc([clean(m.type),clean(m.title),clean(m.result),resultText(m),clean(m.beat)].filter(Boolean).join(' | '))}${m.sample?' SAMPLE pairing, not booked':''}</div></div></div>`).join(''):'<div class="s">No matches entered yet.</div>'}</div>
 ${(ev.segments||[]).length?`<div class="g"><h2>Segments</h2>${ev.segments.map(x=>`<div class="m" style="display:block"><b>${esc(x.title)}</b><div class="sm" style="font-size:14px;margin-top:4px">${esc(x.text)}</div></div>`).join('')}</div>`:''}
 <div class="g"><h2>Story Arc, ${ev.months} months</h2><div class="tl">${win.map(e=>`<div class="e ${e.id===ev.id?'c':''}">${esc(e.name)}<div class="sm">${esc(fmtDate(e.date))}${e.placeholder?' (placeholder)':''}</div></div>`).join('')}</div></div>
 ${ev.connects?`<div class="g"><h2>How it connects</h2><pre>${esc(ev.connects)}</pre></div>`:''}<div class="g"><h2>Summary</h2><pre>${esc(ev.summary.text||generateSummary(data,ev))}</pre></div></body></html>`}
@@ -87,7 +96,7 @@ function titleRemove(d,name){const i=titleNames(d).indexOf(name);if(i<0)throw ne
 function titleMove(d,name,dir){const i=titleNames(d).indexOf(name),j=i+dir;if(i<0||j<0||j>=d.titles.length)return;const [x]=d.titles.splice(i,1);d.titles.splice(j,0,x)}
 function titleSlots(d,name,n){const t=d.titles.find(x=>x.name===name);if(!t)throw new Error('Not found');t.slots=n==2?2:1;t.holders=t.holders.slice(0,t.slots);while(t.holders.length<t.slots)t.holders.push('')}
 function rosterAdd(d,name,o){name=(name||'').trim();if(!name)throw new Error('Name required');if(d.roster.some(r=>sameName(r.name,name)))throw new Error('Name already in roster');const p=person(name,o);d.roster.push(p);return p}
-function refs(d,fn){d.events.forEach(e=>e.matches.forEach(m=>['a','b','winner'].forEach(k=>fn(m,k))));d.titles.forEach(t=>t.holders.forEach((_,i)=>fn(t.holders,i)))}
+function refs(d,fn){d.events.forEach(e=>e.matches.forEach(m=>PKEYS.concat(['winner']).forEach(k=>fn(m,k))));d.titles.forEach(t=>t.holders.forEach((_,i)=>fn(t.holders,i)))}
 function rosterRename(d,old,nu){nu=(nu||'').trim();if(!nu)throw new Error('Name required');if(nu!==old&&d.roster.some(r=>r.name!==old&&sameName(r.name,nu)))throw new Error('Name already in roster');const p=d.roster.find(r=>r.name===old);if(!p)throw new Error('Not found');p.name=nu;refs(d,(o,k)=>{if(o[k]===old)o[k]=nu})}
 function rosterRemove(d,name){const i=names(d).indexOf(name);if(i<0)throw new Error('Not found');d.roster.splice(i,1);refs(d,(o,k)=>{if(o[k]===name)o[k]=''})}
 function rosterMove(d,name,dir){const i=names(d).indexOf(name),j=i+dir;if(i<0||j<0||j>=d.roster.length)return;const [x]=d.roster.splice(i,1);d.roster.splice(j,0,x)}
@@ -125,7 +134,7 @@ function toSheetHTML(data,ev){return `<!doctype html><html><head><meta charset="
 const norm=x=>String(x||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'');
 const sameName=(a,b)=>norm(a)!==''&&norm(a)===norm(b);
 const richness=o=>Object.values(o).filter(v=>v!==''&&v!==null&&v!==false&&!(Array.isArray(v)&&v.every(x=>x===''))).length;
-const evScore=e=>e.matches.reduce((n,m)=>n+['a','b','type','title','result','beat','note','winner'].filter(k=>m[k]).length,0)+(e.sheet?100:0)+(e.summary&&e.summary.text?10:0)+['notes','connects','questions'].filter(k=>e[k]).length+(e.segments||[]).length;
+const evScore=e=>e.matches.reduce((n,m)=>n+PKEYS.concat(['type','title','result','beat','note','winner']).filter(k=>m[k]).length,0)+(e.sheet?100:0)+(e.summary&&e.summary.text?10:0)+['notes','connects','questions'].filter(k=>e[k]).length+(e.segments||[]).length;
 const uniqBy=(arr,f)=>{const seen=new Set();return arr.filter(x=>{const k=f(x);if(k===undefined||k==='')return true;if(seen.has(k))return false;seen.add(k);return true})};
 // Merge records that are the same thing under different ids (case/space/punctuation-insensitive names). Deterministic, so two Macs pick the same winner.
 function dedupe(d){const rep=[];d.dedupeLog=d.dedupeLog||[];const pick=(g,score)=>g.slice().sort((a,b)=>score(b)-score(a)||String(a.id).localeCompare(String(b.id)))[0];
@@ -147,7 +156,7 @@ function dedupe(d){const rep=[];d.dedupeLog=d.dedupeLog||[];const pick=(g,score)
 // Make ids of same-named records in `local` match `remote` (keeps stamps). Used before merging in-memory data with data written by sync.
 function alignIds(local,remote){const map=(a,b)=>a.forEach(x=>{const y=b.find(z=>sameName(z.name,x.name)&&(z.date||'')===(x.date||''));if(y&&y.id!==x.id){if(local.currentId===x.id)local.currentId=y.id;x.id=y.id}});map(local.roster,remote.roster);map(local.titles,remote.titles);map(local.events,remote.events)}
 function validate(d){if(!d||typeof d!=='object'||!Array.isArray(d.events)||!Array.isArray(d.roster))throw new Error('Not an Ark-Book backup');
- d.roster=d.roster.map(r=>typeof r==='string'?person(r):Object.assign(person(r.name),r));d.lists=d.lists||seed().lists;if(!d.lists.methods)d.lists.methods=seed().lists.methods;if(!d.titles){const c=d.champions||{};d.titles=defTitles();d.titles[0].holders=[c.u||''];d.titles[1].holders=[c.o||'']}delete d.champions;d.bookings=Array.isArray(d.bookings)?d.bookings.filter(b=>b&&typeof b==='object').map(b=>Object.assign(blankBooking(),b,{fee:feeNum(b.fee)})):[];if(d.bookings.length)d.bookings=uniqBy(d.bookings,b=>b.id);if(d.lists)delete d.lists.titles;d.titles.forEach(t=>{t.slots=t.slots||1;t.holders=(t.holders||[]).slice(0,t.slots);while(t.holders.length<t.slots)t.holders.push('')});d.events.forEach(e=>{e.matches=e.matches||[];e.summary=e.summary||{tpl:'',text:''};e.months=e.months||6;e.kind=e.kind||'special';e.segments=e.segments||[];if(e.sheet===undefined)e.sheet=null;e.matches.forEach(m=>{if(m.winner===undefined)m.winner='';if(m.method===undefined)m.method='';m.winnerPlanned=!!m.winnerPlanned});['notes','connects','questions'].forEach(k=>{e[k]=e[k]||''})});
+ d.roster=d.roster.map(r=>typeof r==='string'?person(r):Object.assign(person(r.name),r));d.lists=d.lists||seed().lists;if(!d.lists.methods)d.lists.methods=seed().lists.methods;d.lists.types=Array.isArray(d.lists.types)?d.lists.types:[];MTYPES.forEach(t=>{if(!d.lists.types.some(x=>mtKind(x)===mtKind(t)))d.lists.types.push(t)});if(!d.titles){const c=d.champions||{};d.titles=defTitles();d.titles[0].holders=[c.u||''];d.titles[1].holders=[c.o||'']}delete d.champions;d.bookings=Array.isArray(d.bookings)?d.bookings.filter(b=>b&&typeof b==='object').map(b=>Object.assign(blankBooking(),b,{fee:feeNum(b.fee)})):[];if(d.bookings.length)d.bookings=uniqBy(d.bookings,b=>b.id);if(d.lists)delete d.lists.titles;d.titles.forEach(t=>{t.slots=t.slots||1;t.holders=(t.holders||[]).slice(0,t.slots);while(t.holders.length<t.slots)t.holders.push('')});d.events.forEach(e=>{e.matches=e.matches||[];e.summary=e.summary||{tpl:'',text:''};e.months=e.months||6;e.kind=e.kind||'special';e.segments=e.segments||[];if(e.sheet===undefined)e.sheet=null;e.matches.forEach(m=>{XKEYS.forEach(k=>{if(m[k]===undefined)m[k]=''});if(m.winner===undefined)m.winner='';if(m.method===undefined)m.method='';m.winnerPlanned=!!m.winnerPlanned});['notes','connects','questions'].forEach(k=>{e[k]=e[k]||''})});
  if(!d.events.find(e=>e.id===d.currentId))d.currentId=d.events[0]&&d.events[0].id;
  // v0.1.5 migrations: KJ Valentine rename, 12 Gauge Heavyweight Championship = Undisputed, Throw Down is a Special event
  {const OLD='J.K. Valentine',NEW='KJ Valentine';const hasOld=d.roster.some(r=>r.name===OLD),hasNew=d.roster.some(r=>r.name===NEW);
@@ -210,6 +219,6 @@ tfoot td{font-weight:700;background:#f6efd9;border-bottom:0}.grand{margin-top:18
 <div class="hd">${logo?`<img src="${logo}" alt="12 Gauge">`:''}<div><div class="s">12 Gauge Pro Wrestling</div><h1>Talent Bookings: ${esc(title)}</h1></div><div class="dt">Prepared ${esc(new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}))}<br>${list.length} booking${list.length===1?'':'s'}</div></div>
 ${groups||'<div class="empty">No bookings yet.</div>'}${tot.per.length>1?`<div class="grand"><span>Grand total, all events</span><span>${money(tot.grand)}</span></div>`:''}<div class="ft">Ark-Book, 12 Gauge Pro Wrestling. Confidential booking sheet.</div></body></html>`}
 
-const api={BOOK_EVENTS,blankBooking,feeNum,money,bookingEvents,bookingEventAdd,bookingAdd,bookingUpdate,bookingRemove,bookingsList,bookingTotals,bookingSheetHTML,ROLES,namesByRole,byRole,norm,sameName,dedupe,alignIds,bodyHTML,SHEET_CSS,sheetHTML,toSheetHTML,winnerOpts,applyWinner,resultText,titleOffer,applyBoard,slug,cyrb,recordsOf,stamp,adoptIds,mergeData,defTitles,titleNames,holdersOf,titleAdd,titleRename,titleRemove,titleMove,titleSlots,played,kindLabel,person,names,rosterAdd,rosterRename,rosterRemove,rosterMove,uid,seed,blankEvent,blankMatch,fmtDate,sortEvents,storyWindow,wrestlerView,generateSummary,toMarkdown,toHTML,validate,matchLine,clean,ROSTER};
+const api={XKEYS,PKEYS,MTYPES,mtKind,sideKeys,sides,sideLabel,participants,vsLine,BOOK_EVENTS,blankBooking,feeNum,money,bookingEvents,bookingEventAdd,bookingAdd,bookingUpdate,bookingRemove,bookingsList,bookingTotals,bookingSheetHTML,ROLES,namesByRole,byRole,norm,sameName,dedupe,alignIds,bodyHTML,SHEET_CSS,sheetHTML,toSheetHTML,winnerOpts,applyWinner,resultText,titleOffer,applyBoard,slug,cyrb,recordsOf,stamp,adoptIds,mergeData,defTitles,titleNames,holdersOf,titleAdd,titleRename,titleRemove,titleMove,titleSlots,played,kindLabel,person,names,rosterAdd,rosterRename,rosterRemove,rosterMove,uid,seed,blankEvent,blankMatch,fmtDate,sortEvents,storyWindow,wrestlerView,generateSummary,toMarkdown,toHTML,validate,matchLine,clean,ROSTER};
 if(typeof module!=='undefined')module.exports=api;else root.Core=api;
 })(typeof window!=='undefined'?window:globalThis);

@@ -35,3 +35,4 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:6px;text-
 .bk-add .bk-in{min-width:150px}.bk-cur{display:inline-flex;align-items:center;gap:4px;color:#d8a928;font-weight:700}.bk-fee{width:120px;text-align:right}
 .bk-wrap{overflow-x:auto}.bk-tbl{width:100%;border-collapse:collapse}.bk-tbl th{text-align:left;font-size:12px;color:#d8a928;text-transform:uppercase;letter-spacing:1px;padding:6px}.bk-tbl td{padding:6px;border-top:1px solid rgba(255,255,255,.08)}.bk-tbl td .bk-in{width:100%}
 .bk-total{font-size:22px;font-weight:800;color:#d8a928;margin:4px 0}
+.m .xp{grid-column:1/-1;display:flex;gap:10px;align-items:center;flex-wrap:wrap}.m .xp .who{flex:1 1 200px}.who{flex-wrap:wrap}
