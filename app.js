@@ -64,7 +64,8 @@ function vRoster(){const names=Core.names(S);if(!selW||!names.includes(selW))sel
  <td><select data-f="alignment" data-i="${i}">${['','Face','Heel','Tweener'].map(o=>`<option ${o===r.alignment?'selected':''} value="${o}">${o||'Alignment'}</option>`).join('')}</select></td>
  <td class="sub">${esc(Core.holdersOf(S,r.name).join(', ')||'No title')}</td>
  <td><button class="b o" data-mv="-1" data-i="${i}">Up</button> <button class="b o" data-mv="1" data-i="${i}">Down</button> <button class="b o" data-rm="${i}">Remove</button> <button class="b o" data-sel="${esc(r.name)}">View</button></td></tr>`).join('');
- return `<div class="g pad"><div class="row"><div><h1>Roster Manager</h1><div class="sub">Add, rename, remove and reorder. Changes show up in every dropdown right away and are saved with your data and backups.</div></div><div style="flex:1"></div><select id="rolefilter" title="Filter by role">${['All',...S.lists.roles].map(o=>`<option ${o===roleFilter?'selected':''}>${esc(o)}</option>`).join('')}</select><input id="newname" placeholder="New wrestler name"><button class="b" id="addw">+ Add</button></div></div>
+ return `<div class="g pad"><h1>Roster Manager</h1><div class="sub">Add, rename, remove and reorder. Changes show up in every dropdown right away and are saved with your data and backups.</div>
+ <div class="ro-add"><input id="newname" placeholder="New wrestler name" autocomplete="off" enterkeyhint="done"><button class="b" id="addw">+ Add wrestler</button><span class="sp"></span><label class="sub ro-f">Show <select id="rolefilter" title="Filter by role">${['All',...S.lists.roles].map(o=>`<option ${o===roleFilter?'selected':''} value="${esc(o)}">${esc(o==='All'?'All roles':o)}</option>`).join('')}</select></label></div></div>
  <div class="two"><div class="g pad"><table><tr><th></th><th>Name</th><th>Role</th><th>Alignment</th><th>Champion</th><th></th></tr>${rows}</table></div>
  <div class="g pad"><h2>${esc(selW||'')}</h2>${wv?`<div class="sub">Feuds and opponents</div><div style="margin:6px 0 14px">${wv.feuds.map(f=>`<span class="badge s">${esc(f.foe)} x${f.count}</span>`).join('')||'<span class="note">No opponents entered yet.</span>'}</div><div class="sub">Appearances (${wv.appearances.length})</div>${wv.appearances.map(a=>`<div style="margin:6px 0;font-size:13px">${esc(a.event)} <span class="note">${esc(Core.fmtDate(a.date))}</span><br>${a.partners&&a.partners.length?'with '+esc(a.partners.join(', '))+' ':''}vs ${esc(a.foe||'TBD')}${a.sample?' <span class="tag">SAMPLE</span>':''}</div>`).join('')||'<div class="note">Not on any card yet.</div>'}`:''}</div></div>
  ${selW?mediaPanel(selW):''}`}
@@ -116,7 +117,7 @@ document.addEventListener('click',e=>{const t=e.target;
  if(t.id==='addt'){const v=$('#newtitle').value;return mut(()=>Core.titleAdd(S,v))}
  if(t.dataset.trm!==undefined)return mut(()=>{const n=S.titles[+t.dataset.trm].name;if(!confirm('Remove the '+n+' title? Matches using it will be cleared. You can undo.'))throw new Error('Cancelled');Core.titleRemove(S,n)});
  if(t.dataset.tmv)return mut(()=>Core.titleMove(S,S.titles[+t.dataset.ti].name,+t.dataset.tmv));
- if(t.id==='addw'){const v=$('#newname').value;return mut(()=>Core.rosterAdd(S,v))}
+ if(t.id==='addw'){const v=$('#newname').value.trim();if(!v){toast('Type a wrestler name first');return $('#newname').focus()}const had=Core.names(S).some(n=>Core.sameName(n,v));mut(()=>Core.rosterAdd(S,v));if(!had&&Core.names(S).includes(v)){selW=v;const n=$('#newname');if(n){n.value='';n.focus()}toast('Added '+v)}return}
  if(t.dataset.rm!==undefined)return removeWrestler(S.roster[+t.dataset.rm].name);
  if(t.dataset.mv)return mut(()=>Core.rosterMove(S,S.roster[+t.dataset.i].name,+t.dataset.mv));
  if(t.dataset.sel){selW=t.dataset.sel;return draw()}
@@ -182,6 +183,7 @@ cmEl.addEventListener('click',e=>{const el=e.target.closest('.it');if(!el)return
  });hide()});
 function setField(p,v){const l=p.split('.').pop();if(l==='winner'){const mp=p.replace(/\.winner$/,''),m=get(mp);Core.applyWinner(m,v);const o=Core.titleOffer(S,m);if(o){if(o.slots>1)toast('Tag title: update the champions on the Titles tab if they won it.');else if(confirm(m.winner+' won the '+o.title+'. Make '+m.winner+' the new champion?')){S.titles.find(t=>t.name===o.title).holders[0]=m.winner}}return}if(l==='kind'){set(p,v==='Annual Cycle'?'annual':'special')}else if(l==='months')set(p,+v);else set(p,v)}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')return hide();
+ if(e.key==='Enter'&&e.target&&e.target.id==='newname'){e.preventDefault();return $('#addw').click()}
  if((e.metaKey||e.ctrlKey)&&e.key==='z'&&!['INPUT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();return undo()}
  if(e.key==='Enter'&&document.activeElement&&document.activeElement.id==='ci'&&(document.activeElement.tagName!=='TEXTAREA'||e.metaKey||e.ctrlKey)){const v=ci.value.trim();if(!v)return;const m=cmEl.dataset.mode,p=ctx.p;
   mut(()=>{if(m==='edit'){if(/^lists\./.test(p))set(p,v);else if(p.split('.').pop()==='months'||p.endsWith('kind'))setField(p,v);else set(p,v)}else{const l=LISTOF(p);if(l==='roster'){if(!Core.names(S).includes(v))Core.rosterAdd(S,v)}else if(l==='titles'){if(!Core.titleNames(S).includes(v))Core.titleAdd(S,v)}else if(S.lists[l]&&!S.lists[l].includes(v))S.lists[l].push(v);setField(p,v)}});hide()}});
