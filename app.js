@@ -16,10 +16,19 @@ const disp=(p,v)=>p.endsWith('.months')?v+(v==1?' month':' months'):p.endsWith('
 const F=(p,cls='')=>{const v=get(p),l=p.split('.').pop();return `<span class="f ${cls} ${v||v===0?'':'empty'}" data-k="${p}">${esc(v||v===0?disp(p,v):(PH[l]||'Set value'))}</span>`};
 const furl=f=>f?(window.sb&&window.sb.urlFor?window.sb.urlFor(f):'file://'+encodeURI(f)):'';
 const av=n=>{const m=n&&MEDIA[n];return m&&m.promo?`<img class="av" src="${furl(m.promo)}">`:''};
-async function refreshMedia(){try{MEDIA=await window.sb.mediaAll(Core.names(S))}catch(e){MEDIA={}}let ch=false;S.roster.forEach(r=>{const v=MEDIA[r.name]&&MEDIA[r.name].video;const base=v?String(v).split('/').pop():'';if(base&&r.video!==base){r.video=base;ch=true}});if(ch){Core.stamp(S);save()}draw()}
+async function refreshMedia(){try{MEDIA=await window.sb.mediaAll(Core.names(S))}catch(e){MEDIA={}}let ch=false;S.roster.forEach(r=>{const v=MEDIA[r.name]&&MEDIA[r.name].video;const base=v?String(v).split('/').pop():'';if(base&&r.video!==base){r.video=base;ch=true}});if(ch){Core.stamp(S);save()}bgDraw()}
 const E=()=>`events.${S.events.indexOf(cur())}`;
 const TABS=[['events','Events'],['board','Event Board'],['story','Story Arc'],['titles','Titles'],['roster','Roster'],['bookings','Bookings'],['archive','Archive']];
-function draw(){const sc=$('#main').scrollTop;$('#tabs').innerHTML=TABS.map(t=>`<div class="tab ${view===t[0]?'on':''}" data-tab="${t[0]}">${t[1]}</div>`).join('');$('#main').innerHTML=({events:vEvents,board:vBoard,story:vStory,roster:vRoster,titles:vTitles,archive:vArchive,bookings:vBookings})[view]();$('#main').scrollTop=sc}
+// Typing guard: background redraws (sync pulls, media refresh, archive refresh) wait while a text field is focused, then run on blur.
+// Every redraw also keeps focus, caret and any uncommitted text of the field being edited.
+const isTyping=()=>{const a=document.activeElement;return !!(a&&a.closest&&a.closest('#main,#cm')&&(a.tagName==='TEXTAREA'||a.isContentEditable||(a.tagName==='INPUT'&&!/^(button|checkbox|radio|file|submit|range|color)$/i.test(a.type))))};
+let drawPending=false;const bgDraw=()=>{if(isTyping()){drawPending=true;return}drawPending=false;draw()};
+document.addEventListener('focusout',()=>{if(drawPending)setTimeout(()=>{if(drawPending&&!isTyping())bgDraw()},0)});
+const fieldKey=el=>{if(!el||!el.closest||!el.closest('#main'))return null;for(const a of ['data-tp','data-bkf','data-tf','data-f','data-k']){if(el.hasAttribute(a)){const extra=['data-bkid','data-ti','data-i'].map(x=>el.getAttribute(x)||'').join('|');return `[${a}="${CSS.escape(el.getAttribute(a))}"]`+(extra.replace(/\|/g,'')?'@'+extra:'')}}return el.id?'#'+CSS.escape(el.id):null};
+function findField(k){const [sel,extra]=k.split('@');const c=[...document.querySelectorAll('#main '+sel)];if(!extra)return c[0];return c.find(el=>['data-bkid','data-ti','data-i'].map(x=>el.getAttribute(x)||'').join('|')===extra)}
+function draw(){const fa=document.activeElement,fk=fieldKey(fa);let fs=null;if(fk&&'value' in fa){fs={v:fa.value,dirty:fa.value!==(fa.defaultValue!==undefined?fa.defaultValue:fa.value),s:fa.selectionStart,e:fa.selectionEnd}}
+ draw0();if(fk){const el=findField(fk);if(el){if(fs&&fs.dirty&&el.value!==fs.v)el.value=fs.v;el.focus({preventScroll:true});try{if(fs&&fs.s!=null)el.setSelectionRange(fs.s,fs.e)}catch(_){}}}}
+function draw0(){const sc=$('#main').scrollTop;$('#tabs').innerHTML=TABS.map(t=>`<div class="tab ${view===t[0]?'on':''}" data-tab="${t[0]}">${t[1]}</div>`).join('');$('#main').innerHTML=({events:vEvents,board:vBoard,story:vStory,roster:vRoster,titles:vTitles,archive:vArchive,bookings:vBookings})[view]();$('#main').scrollTop=sc}
 function vEvents(){const evs=Core.sortEvents(S.events);const card=e=>`<div class="card ${e.id===S.currentId?'cur':''}" data-ev="${e.id}"><b>${esc(e.name)}</b><span class="badge ${e.kind==='annual'?'':'s'}">${Core.kindLabel(e).toUpperCase()}</span><div class="sub">${esc(Core.fmtDate(e.date))}${e.cycleMonth?' | '+e.cycleMonth:''}</div><div class="sub">${Core.played(e).length} matches${e.placeholder?' | placeholder':''}</div></div>`;
  return `<div class="g pad"><div class="row"><div><h1>Events</h1><div class="sub">Open an event to build its card. Right-click an event for more.</div></div><div style="flex:1"></div><button class="b" id="newev">+ New event</button></div></div>
  <div class="g pad"><h2>Annual Cycle</h2><div class="cards">${evs.filter(e=>e.kind==='annual').map(card).join('')}</div></div>
@@ -66,7 +75,7 @@ function mediaPanel(n){const m=MEDIA[n]||{};const slot=(k,label,f,tag)=>`<div cl
 // ---- poster / match card archive
 let ARCH={events:{},orphans:[]},archYear=null;
 const evYear=e=>/^\d{4}/.test(e.date||'')?e.date.slice(0,4):'Undated',evKey=e=>({id:e.id,date:e.date,name:e.name});
-async function refreshArchive(){try{ARCH=await window.sb.archiveAll(S.events.map(evKey))}catch(e){ARCH={events:{},orphans:[]}}if(view==='archive')draw()}
+async function refreshArchive(){try{ARCH=await window.sb.archiveAll(S.events.map(evKey))}catch(e){ARCH={events:{},orphans:[]}}if(view==='archive')bgDraw()}
 const isPdf=f=>/\.pdf$/i.test(f),bn=f=>String(f).split(/[\\/]/).pop();
 function archTiles(fs,ev,kind){return fs.map(f=>`<div class="athumb">${isPdf(f)?`<div class="pdft" data-aopen="${esc(f)}">PDF</div>`:`<img src="${furl(f)}" data-aopen="${esc(f)}" loading="lazy">`}<div class="note" title="${esc(bn(f))}">${esc(bn(f))}</div><div class="row"><button class="b o" data-areplace="${esc(f)}" data-aev="${ev?ev.id:''}" data-akind="${kind}">Replace</button><button class="b o" data-aremove="${esc(f)}">Remove</button></div></div>`).join('')}
 function archZone(ev,kind,label,fs){return `<div class="mslot" data-adrop="${kind}" data-aev="${ev.id}"><div class="sub"><b>${label}</b> <span class="note">${fs.length?fs.length+' file'+(fs.length>1?'s':''):'none'}</span></div><div class="agrid">${archTiles(fs,ev,kind)}</div><div class="row" style="margin-top:6px"><button class="b o" data-aattach="${kind}" data-aev="${ev.id}">Attach</button><span class="note">or drop images / PDF here</span></div></div>`}

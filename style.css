@@ -37,3 +37,4 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:6px;text-
 .bk-total{font-size:22px;font-weight:800;color:#d8a928;margin:4px 0}
 .m .xp{grid-column:1/-1;display:flex;gap:10px;align-items:center;flex-wrap:wrap}.m .xp .who{flex:1 1 200px}.who{flex-wrap:wrap}
 .mord{display:inline-flex;gap:6px;align-items:center;margin-right:6px}.mord .b{padding:4px 10px;font-size:12px}.mord .b:disabled{opacity:.35;cursor:default;filter:none}.n[draggable]{cursor:grab}.m.dropon{outline:2px dashed #d8a928}
+.bk-rl{display:flex;justify-content:space-between;gap:10px;font-size:12px}
