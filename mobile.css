@@ -31,3 +31,4 @@ input,textarea,select{font-size:16px}
 /* Mac-only archive actions */
 [data-azip],[data-areveal],.row:has([data-asave]){display:none!important}
 @media (max-width:820px){.bk-tbl,.bk-tbl tbody,.bk-tbl tr,.bk-tbl td{display:block;width:100%}.bk-tbl tr:first-child{display:none}.bk-tbl tr{border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:6px;margin-bottom:10px;background:rgba(0,0,0,.25)}.bk-tbl td{border:0;padding:4px}.bk-fee{width:100%}.bk-add .bk-in{width:100%}.bk-cur{width:100%}}
+@media (max-width:820px){.ro-add #newname{flex:1 1 100%;max-width:none;font-size:16px}.ro-add .b{flex:1}.ro-add .sp{display:none}.ro-f{width:100%}.ro-f select{flex:1}#main select{font-size:16px}}
