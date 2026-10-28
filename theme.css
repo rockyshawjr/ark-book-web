@@ -1,0 +1,22 @@
+/* Ark-Book theme variables (0.1.15). Defaults = the original 12 Gauge dark look. theme.js overrides accent vars from Settings > Branding. */
+:root{--acc:#d8a928;--acc-rgb:216,169,40;--acc-text:#d8a928;--on-acc:#080808;--bg:#070707;--fg:#fff;--fg2:#d5d0c7;--fg3:#a9a399;--ink:255,255,255;--shade:0,0,0;--opt:#111;--scheme:dark;--glow:rgba(0,214,79,.10);--cm-a:rgba(60,55,40,.8);--cm-b:rgba(20,20,20,.8);--toast:rgba(30,30,30,.9);--ovl:rgba(5,5,5,.94);
+--chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23d8a928' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}
+html{color-scheme:var(--scheme)}
+body{color:var(--fg)}
+[data-theme=light]{--bg:#f3f0e8;--fg:#17140f;--fg2:#3f3a32;--fg3:#6e685d;--ink:0,0,0;--shade:255,255,255;--opt:#fff;--scheme:light;--glow:rgba(0,160,60,.07);--cm-a:rgba(255,252,244,.96);--cm-b:rgba(242,238,228,.96);--toast:rgba(255,255,255,.97);--ovl:rgba(243,240,232,.97)}
+[data-theme=light] .g{background:linear-gradient(145deg,rgba(255,255,255,.88),rgba(255,255,255,.6));border-color:rgba(0,0,0,.1);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(60,45,10,.12)}
+[data-theme=light] .m,[data-theme=light] .card,[data-theme=light] .ev,[data-theme=light] .mslot{background:rgba(255,255,255,.7)}
+[data-theme=light] .mprev{background:#e9e5dc}[data-theme=light] .athumb img,[data-theme=light] .athumb .pdft{background:#e9e5dc}
+[data-theme=light] .kqr svg{background:#fff}
+[data-theme=light] .kerr{color:#c02a2a}
+/* Windows: native title bar, so the sidebar does not need room for the Mac traffic lights */
+body.plat-win #nav{padding-top:14px;-webkit-app-region:no-drag}
+/* Settings > Branding */
+.th-sw{width:44px;height:44px;border-radius:50%;border:3px solid transparent;cursor:pointer;display:inline-block}
+.th-sw.on{border-color:var(--fg);box-shadow:0 0 0 2px var(--bg) inset}
+.th-logo{max-width:320px;max-height:110px;object-fit:contain;padding:10px;border-radius:14px;background:rgba(var(--shade),.3);border:1px dashed rgba(var(--ink),.25)}
+.th-cr{display:inline-block;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700}
+.th-ok{background:rgba(31,174,91,.18);color:#1fae5b}.th-warn{background:rgba(224,160,80,.2);color:#e0a050}.th-bad{background:rgba(232,106,106,.2);color:#e86a6a}
+[data-theme=light] .th-ok{color:#0f7a3c}[data-theme=light] .th-warn{color:#9a5a00}[data-theme=light] .th-bad{color:#b02020}
+.th-mode .b.o.on{background:var(--acc);color:var(--on-acc);border-color:var(--acc)}
+#th-custom{width:54px;height:40px;padding:2px;border-radius:10px;cursor:pointer}

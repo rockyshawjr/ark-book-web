@@ -82,7 +82,7 @@ window.sb={
  openFolder:async()=>settings(),board:async()=>null,pathForFile:f=>f,urlFor,
  exportEvent:async(kind,data,id)=>{const ev=data.events.find(x=>x.id===id);if(!ev)return null;const base=(ev.name.replace(/[^\w\- ]+/g,'').trim()||'event');
   if(kind==='md'){dl(base+'.md',Core.toMarkdown(data,ev),'text/markdown');return base+'.md (downloaded)'}
-  const sheet=kind.startsWith('sheet');const html=sheet?Core.toSheetHTML(data,ev):Core.toHTML(data,ev,'logo.png');const w=window.open('','_blank');if(!w)return 'Pop-up blocked. Allow pop-ups to print or save as PDF.';w.document.write(html);w.document.close();setTimeout(()=>w.print(),600);return 'opened for print / Save as PDF'},
+  const sheet=kind.startsWith('sheet');const html=sheet?Core.toSheetHTML(data,ev):Core.toHTML(data,ev,window.ArkTheme?ArkTheme.logoFor(data,'logo.png'):'logo.png');const w=window.open('','_blank');if(!w)return 'Pop-up blocked. Allow pop-ups to print or save as PDF.';w.document.write(html);w.document.close();setTimeout(()=>w.print(),600);return 'opened for print / Save as PDF'},
  backupExport:async d=>{dl('Ark-Book-backup-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(d,null,1),'application/json');return 'downloaded (JSON only, no media)'},
  backupImport:async()=>{if(RO())return roErr;const [f]=await pick('.json,application/json');if(!f)return null;try{return {data:Core.validate(JSON.parse(await f.text())),path:f.name}}catch(e){return {error:String(e.message||e)}}},
  mediaAll:async names=>{const out={};await Promise.all(names.map(async n=>{const p=promoPath(n);out[n]={promo:p?await ensure(p).catch(()=>null):null,video:null,music:null}}));return out},
