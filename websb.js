@@ -1,6 +1,7 @@
 // window.sb for the browser: same bridge the Electron app uses, backed by localStorage + IndexedDB + the GitHub API (websync.js).
 (()=>{
-const W=ArkWebSync,LS=localStorage,KEY=LS.getItem('ark.arkkey')||'',P=KEY?'arkk.':'ark.'; // an Ark-Book key keeps its own fee-free copy of the data, apart from full-access data
+const W=ArkWebSync,LS=localStorage,KEY=LS.getItem('ark.arkkey')||'',TOKEN=LS.getItem('ark.token')||'',PUB=!KEY&&!TOKEN,P=KEY?'arkk.':PUB?'arkp.':'ark.';
+ // no key and no token = public read-only preview: its own fee-free copy (arkp.*), never reads or writes the full-access copy (ark.*) // an Ark-Book key keeps its own fee-free copy of the data, apart from full-access data
 const SVC_DEFAULT='https://bgfvlysirfdzzftmptni.supabase.co/functions/v1/ark-keys';
 const kv={get:k=>{try{return JSON.parse(LS.getItem(P+k))}catch(_){return null}},set:(k,v)=>LS.setItem(P+k,JSON.stringify(v))};
 // blob cache in IndexedDB (sha -> bytes)
@@ -13,7 +14,7 @@ const cfg=()=>kv.get('cfg')||{};
 const svc=()=>(cfg().svc||LS.getItem('ark.svc')||SVC_DEFAULT).replace(/\/+$/,'');
 // ARK: who this device is. GitHub token = full access (admin). Ark-Book key = crew or viewer through the key service, never sees fees.
 const keyRole=LS.getItem('ark.keyRole')||'viewer';
-window.ARK=KEY?{mode:'key',role:keyRole,fees:false,edit:keyRole==='crew',admin:false,label:LS.getItem('ark.keyLabel')||''}:{mode:LS.getItem('ark.token')?'token':'local',role:'admin',fees:true,edit:true,admin:!!LS.getItem('ark.token')};
+window.ARK=KEY?{mode:'key',role:keyRole,fees:false,edit:keyRole==='crew',admin:false,label:LS.getItem('ark.keyLabel')||''}:TOKEN?{mode:'token',role:'admin',fees:true,edit:true,admin:true}:{mode:'public',role:'viewer',fees:false,edit:false,admin:false,label:'Read only'};
 window.ARK.svc=svc;
 async function svcCall(method,path,o={}){let r;const headers=Object.assign({},o.headers||{});if(o.body)headers['Content-Type']='application/json';
  r=await fetch(svc()+path,{method,headers,body:o.body?JSON.stringify(o.body):undefined,cache:'no-store'});
@@ -74,9 +75,9 @@ function settings(prefill){const c=cfg(),has=!!LS.getItem('ark.token'),hasKey=!!
   if(t)LS.setItem('ark.token',t);mkSync();o.remove();sync.syncNow()};
  const d=o.querySelector('#tdis');if(d)d.onclick=()=>{if(hasKey){if(confirm('Remove the Ark-Book key from this device? Its copy of the data is cleared too.')){Object.keys(LS).filter(k=>k.startsWith('arkk.')).forEach(k=>LS.removeItem(k));['ark.arkkey','ark.keyRole','ark.keyLabel'].forEach(k=>LS.removeItem(k));location.reload()}return}
   if(confirm('Remove the sync token from this phone? Local data stays.')){LS.removeItem('ark.token');mkSync();o.remove();emit({type:'status',status:sync.status})}}}
-const unsupported=m=>({error:m});const RO=()=>!window.ARK.edit;const roErr={error:'View-only key: changes are not saved'};
+const unsupported=m=>({error:m});const RO=()=>!window.ARK.edit;const roErr={error:KEY?'View-only key: changes are not saved':'Read only: sign in with an Ark-Book key to make changes'};
 window.sb={
- load:async()=>({data:kv.get('data'),path:'this phone (synced through GitHub)'}),
+ load:async()=>{const d=kv.get('data');if(PUB){if(d&&Array.isArray(d.bookings))d.bookings=d.bookings.map(b=>Object.assign({},b,{fee:0}));return {data:d,path:'read only (no key)'}}return {data:d,path:'this phone (synced through GitHub)'}},
  save:async d=>{if(!window.ARK.edit)return true;kv.set('data',d);kv.set('dataMtime',Date.now());kick();return true},
  syncNow:()=>sync.syncNow(),syncStatus:async()=>sync.status,onSync:cb=>{listeners.push(cb);if(!sync.token)setTimeout(()=>emit({type:'status',status:sync.status}),0);else setTimeout(()=>sync.syncNow(),500)},
  openFolder:async()=>settings(),board:async()=>null,pathForFile:f=>f,urlFor,
@@ -104,7 +105,7 @@ window.sb={
  archiveSaveExport:async()=>unsupported('Exporting a match card into the archive is done on the Mac. On the phone, attach an image or PDF instead.'),
  archiveZipYear:async()=>unsupported('Year zip export is a Mac feature.')};
 window.addEventListener('load',()=>{const b=document.getElementById('bdir');if(b)b.textContent=KEY?'Ark-Book key':'Sign in to sync';
- document.body.classList.toggle('ark-nofee',!window.ARK.fees);document.body.classList.toggle('ark-ro',!window.ARK.edit);document.body.classList.toggle('ark-admin',!!window.ARK.admin);const rl=document.getElementById('arkrole');if(rl)rl.textContent=KEY?(window.ARK.role==='crew'?'Crew key (no fees)':'View-only key'):'';
+ document.body.classList.toggle('ark-nofee',!window.ARK.fees);document.body.classList.toggle('ark-ro',!window.ARK.edit);document.body.classList.toggle('ark-admin',!!window.ARK.admin);const rl=document.getElementById('arkrole');if(rl)rl.textContent=KEY?(window.ARK.role==='crew'?'Crew key (no fees)':'View-only key'):PUB?'Read only (no key)':'';
  const m=/[#&]arkkey=(ark_[A-Za-z0-9_-]+)/.exec(location.hash);if(m){history.replaceState(null,'',location.pathname+location.search);setTimeout(()=>settings(m[1]),400);return}
  if(!LS.getItem('ark.token')&&!KEY&&!LS.getItem('ark.asked')){LS.setItem('ark.asked','1');setTimeout(settings,600)}});
 window.__arkWeb={sync:()=>sync,kv,blobs,settings};
