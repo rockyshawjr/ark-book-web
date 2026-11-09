@@ -1,5 +1,7 @@
-// Crew, Referee, and Manager name fields are dropdowns of names already saved for that role.
-// Sound and Camera use the same list. A new name can still be added. Talent stays the roster picker.
+// Crew, Referee, and Manager name fields are dropdowns of names saved for that role, names already booked in that role,
+// and roster people whose Roster role matches (roster Referees show for Referee, Managers for Manager).
+// Sound and Camera use the same list. "+ Add new" opens an inline text box (no window.prompt: the Electron Mac app does not support it).
+// Talent stays the roster picker.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -56,8 +58,8 @@ function inputs(html) {
   return out;
 }
 
-function loadBookings(prompt) {
-  const listeners = {input: [], click: [], change: []};
+function loadBookings() {
+  const listeners = {input: [], click: [], change: [], keydown: []};
   const fields = {};
   const context = {
     Core,
@@ -67,9 +69,10 @@ function loadBookings(prompt) {
     $: sel => fields[String(sel).replace(/^#/, '')] || null,
     mut: fn => { fn(); },
     draw() {},
-    toast() {},
+    toasts: [],
+    toast(m) { context.toasts.push(m); },
     confirm: () => false,
-    prompt,
+    prompt() { throw new Error('prompt() must not be used (Electron does not support it)'); },
     fields,
     document: {
       addEventListener(type, fn) { (listeners[type] || (listeners[type] = [])).push(fn); },
@@ -85,10 +88,15 @@ function loadBookings(prompt) {
   return {context, listeners, fields};
 }
 
+const fire = (listeners, type, target, extra = {}) => listeners[type].forEach(fn => fn({target, preventDefault() {}, ...extra}));
+const pickNew = (listeners, id, f = 'talent') => fire(listeners, 'change', {id: '', dataset: {bkf: f, bkid: id}, value: '__new'});
+const clickId = (listeners, id) => fire(listeners, 'click', {id, dataset: {}, closest: () => null});
+const newBox = html => inputs(html).find(i => i.id === 'bk-newin');
+
 function book() {
   const d = Core.validate({
     events: [{id: 'e1', name: 'November Rain', date: '2026-11-15'}],
-    roster: ['KJ Valentine', 'BK Bennet'],
+    roster: ['KJ Valentine', 'BK Bennet', {name: 'David Madden', role: 'Referee'}, {name: 'Nick Atchley', role: 'Referee'}, {name: 'Dan the Manager Carter', role: 'Manager'}, {name: 'earl', role: 'Referee'}],
     titles: [],
     bookings: []
   });
@@ -107,29 +115,27 @@ function nameSelect(html, id) {
   return selects(html).find(s => s.bkf === 'talent' && s.bkid === id);
 }
 
-test('Crew, Referee, and Manager names are dropdowns of that role only, and a new name can be added', () => {
-  const prompts = [];
-  const {context, listeners} = loadBookings(q => { prompts.push(q); return 'Stagehand'; });
+
+test('staff names are dropdowns of that role (saved, booked, and roster people with that role), with + Add new name', () => {
+  const {context} = loadBookings();
   const {d, rows} = book();
   context.S = d;
   const html = context.vBookings();
   assert.equal(html.includes('<datalist'), false, 'staff names are a dropdown, not a suggestion box');
   assert.equal(inputs(html).some(i => i.bkf === 'talent'), false, 'staff name is not a free-typed field');
-
   const expectNames = {
     Sound: ['Mic'],
     Camera: ['Lens'],
     Crew: ['Grip', 'Rigger'],
-    Referee: ['Earl'],
-    Manager: ['Paul']
+    Referee: ['David Madden', 'Earl', 'Nick Atchley'],
+    Manager: ['Dan the Manager Carter', 'Paul']
   };
   for (const role of STAFF) {
     const sel = nameSelect(html, rows[role].id);
     assert.ok(sel, role + ' name dropdown');
     assert.equal(sel.options[0].text, 'Select ' + role.toLowerCase());
     assert.equal(sel.options[0].value, '');
-    assert.deepEqual(sel.options.slice(1, -1).map(o => o.text), expectNames[role]);
-    assert.deepEqual(sel.options.slice(1, -1).map(o => o.value), expectNames[role]);
+    assert.deepEqual(sel.options.slice(1, -1).map(o => o.text), expectNames[role], role + ' names');
     assert.equal(sel.options.at(-1).text, '+ Add new name');
     assert.equal(sel.options.at(-1).value, '__new');
     assert.equal(sel.options.find(o => o.selected).value, rows[role].talent);
@@ -138,76 +144,108 @@ test('Crew, Referee, and Manager names are dropdowns of that role only, and a ne
   assert.ok(talent, 'Talent still uses a name dropdown');
   assert.equal(talent.options.some(o => o.value === '__new'), false, 'Talent stays the roster picker');
   assert.equal(talent.options.find(o => o.selected).value, 'KJ Valentine');
-  assert.equal(nameSelect(html, rows.Crew.id).options.some(o => o.text === 'Earl'), false);
-  assert.equal(nameSelect(html, rows.Referee.id).options.some(o => o.text === 'Paul'), false);
-
-  const before = {event: rows.Crew.event, date: rows.Crew.date, fee: rows.Crew.fee, role: rows.Crew.role};
-  listeners.change.forEach(fn => fn({target: {id: '', dataset: {bkf: 'talent', bkid: rows.Crew.id}, value: '__new'}}));
-  assert.equal(prompts[0], 'New Crew name');
-  assert.equal(rows.Crew.talent, 'Stagehand');
-  assert.equal(rows.Crew.event, before.event);
-  assert.equal(rows.Crew.date, before.date);
-  assert.equal(rows.Crew.fee, before.fee);
-  assert.equal(rows.Crew.role, before.role);
-  const reopened = Core.validate(JSON.parse(JSON.stringify(d)));
-  assert.equal(reopened.bookings.find(b => b.id === rows.Crew.id).talent, 'Stagehand');
-  assert.equal(reopened.bookings.find(b => b.id === rows.Referee.id).talent, 'Earl');
-  context.S = reopened;
-  const again = nameSelect(context.vBookings(), rows.Crew.id);
-  assert.equal(again.options.find(o => o.selected).value, 'Stagehand');
-  assert.ok(again.options.some(o => o.value === 'Rigger'));
+  assert.equal(nameSelect(html, rows.Crew.id).options.some(o => o.text === 'David Madden'), false, 'roster refs only under Referee');
+  assert.equal(nameSelect(html, rows.Manager.id).options.some(o => o.text === 'Nick Atchley'), false);
+  assert.equal(nameSelect(html, rows.Referee.id).options.some(o => o.text === 'Dan the Manager Carter'), false);
 });
 
-test('cancelling a new staff name leaves the booking unchanged', () => {
-  const {context, listeners} = loadBookings(() => null);
+test('+ Add new name opens an inline box (no prompt); Save sets the name and keeps the rest of the booking', () => {
+  const {context, listeners, fields} = loadBookings();
   const {d, rows} = book();
   context.S = d;
-  listeners.change.forEach(fn => fn({target: {id: '', dataset: {bkf: 'talent', bkid: rows.Manager.id}, value: '__new'}}));
+  const before = {event: rows.Crew.event, date: rows.Crew.date, fee: rows.Crew.fee, role: rows.Crew.role};
+  pickNew(listeners, rows.Crew.id);
+  let html = context.vBookings();
+  assert.ok(newBox(html), 'inline name box shown');
+  assert.equal(nameSelect(html, rows.Crew.id), undefined, 'that row shows the box instead of the dropdown');
+  assert.ok(nameSelect(html, rows.Referee.id), 'other rows unchanged');
+  assert.equal(rows.Crew.talent, 'Grip', 'nothing saved yet');
+  fields['bk-newin'] = {value: '  '};
+  clickId(listeners, 'bk-newok');
+  assert.equal(rows.Crew.talent, 'Grip', 'blank name is not saved');
+  assert.ok(newBox(context.vBookings()), 'box stays open after a blank save');
+  fields['bk-newin'] = {value: ' Stagehand '};
+  clickId(listeners, 'bk-newok');
+  assert.equal(rows.Crew.talent, 'Stagehand');
+  assert.deepEqual({event: rows.Crew.event, date: rows.Crew.date, fee: rows.Crew.fee, role: rows.Crew.role}, before);
+  html = context.vBookings();
+  assert.equal(newBox(html), undefined, 'box closes after save');
+  assert.equal(nameSelect(html, rows.Crew.id).options.find(o => o.selected).value, 'Stagehand');
+  const reopened = Core.validate(JSON.parse(JSON.stringify(d)));
+  assert.equal(reopened.bookings.find(b => b.id === rows.Crew.id).talent, 'Stagehand');
+  context.S = reopened;
+  const again = nameSelect(context.vBookings(), rows.Crew.id);
+  assert.ok(again.options.some(o => o.value === 'Stagehand'));
+  assert.ok(again.options.some(o => o.value === 'Rigger'));
+
+  pickNew(listeners, rows.Referee.id);
+  fields['bk-newin'] = {value: 'Ref Two'};
+  fire(listeners, 'keydown', {id: 'bk-newin'}, {key: 'Enter'});
+  assert.equal(context.S.bookings.find(b => b.id === rows.Referee.id).talent, 'Ref Two', 'Enter saves');
+});
+
+test('Cancel or Escape leaves the booking unchanged', () => {
+  const {context, listeners, fields} = loadBookings();
+  const {d, rows} = book();
+  context.S = d;
+  const snap = JSON.stringify(d.bookings);
+  pickNew(listeners, rows.Manager.id);
+  fields['bk-newin'] = {value: 'Somebody'};
+  clickId(listeners, 'bk-newx');
+  assert.equal(newBox(context.vBookings()), undefined);
+  pickNew(listeners, rows.Referee.id);
+  fields['bk-newin'] = {value: 'Other'};
+  fire(listeners, 'keydown', {id: 'bk-newin'}, {key: 'Escape'});
+  assert.equal(newBox(context.vBookings()), undefined);
+  assert.equal(JSON.stringify(d.bookings), snap);
   assert.equal(rows.Manager.talent, 'Paul');
   assert.equal(rows.Referee.talent, 'Earl');
 });
 
-test('the add form can pick a saved Referee and can type a new Manager', () => {
-  let next = 'Pat';
-  const {context, listeners, fields} = loadBookings(() => next);
+test('the add form can pick a roster Referee and add a new Manager and a new event inline', () => {
+  const {context, listeners, fields} = loadBookings();
   const {d} = book();
   context.S = d;
   context.vBookings();
   fields['bk-role'] = {value: 'Referee'};
-  listeners.change.forEach(fn => fn({target: {id: 'bk-role', dataset: {}, value: 'Referee'}}));
+  fire(listeners, 'change', {id: 'bk-role', dataset: {}, value: 'Referee'});
   let html = context.vBookings();
   const addRef = selects(html).find(s => s.id === 'bk-name');
   assert.ok(addRef, 'add form name dropdown');
-  assert.equal(addRef.options.some(o => o.value === 'Earl'), true);
+  assert.ok(addRef.options.some(o => o.value === 'David Madden'), 'roster referee offered');
   assert.equal(addRef.options.some(o => o.value === 'Paul'), false);
-  fields['bk-role'] = {value: 'Referee'};
-  fields['bk-name'] = {value: 'Earl'};
-  fields['bk-event'] = {value: 'November Rain'};
-  fields['bk-date'] = {value: '2026-11-15'};
-  fields['bk-fee'] = {value: ''};
-  listeners.click.forEach(fn => fn({target: {id: 'bk-addbtn', dataset: {}, closest: () => null}}));
-  const earl = context.S.bookings.filter(b => b.talent === 'Earl');
-  assert.equal(earl.length, 2);
-  assert.ok(earl.every(b => b.role === 'Referee'));
+  Object.assign(fields, {'bk-role': {value: 'Referee'}, 'bk-name': {value: 'David Madden'}, 'bk-event': {value: 'November Rain'}, 'bk-date': {value: '2026-11-15'}, 'bk-fee': {value: ''}});
+  clickId(listeners, 'bk-addbtn');
+  const dm = context.S.bookings.filter(b => b.talent === 'David Madden');
+  assert.equal(dm.length, 1);
+  assert.equal(dm[0].role, 'Referee');
 
-  next = 'Pat';
   fields['bk-role'] = {value: 'Manager'};
-  listeners.change.forEach(fn => fn({target: {id: 'bk-role', dataset: {}, value: 'Manager'}}));
+  fire(listeners, 'change', {id: 'bk-role', dataset: {}, value: 'Manager'});
   fields['bk-name'] = {value: '__new'};
-  listeners.change.forEach(fn => fn({target: {id: 'bk-name', dataset: {}, value: '__new'}}));
+  fire(listeners, 'change', {id: 'bk-name', dataset: {}, value: '__new'});
   html = context.vBookings();
-  const addMgr = selects(html).find(s => s.id === 'bk-name');
-  assert.equal(addMgr.options.find(o => o.selected).value, 'Pat');
-  fields['bk-role'] = {value: 'Manager'};
-  fields['bk-name'] = {value: 'Pat'};
-  fields['bk-event'] = {value: 'November Rain'};
-  fields['bk-date'] = {value: '2026-11-15'};
-  fields['bk-fee'] = {value: '12'};
-  listeners.click.forEach(fn => fn({target: {id: 'bk-addbtn', dataset: {}, closest: () => null}}));
+  assert.ok(newBox(html), 'inline box in the add form');
+  assert.equal(selects(html).find(s => s.id === 'bk-name'), undefined);
+  delete fields['bk-name'];
+  fields['bk-newin'] = {value: 'Pat'};
+  fire(listeners, 'keydown', {id: 'bk-newin'}, {key: 'Enter'});
+  html = context.vBookings();
+  assert.equal(selects(html).find(s => s.id === 'bk-name').options.find(o => o.selected).value, 'Pat');
+
+  fields['bk-event'] = {value: '__new'};
+  fire(listeners, 'change', {id: 'bk-event', dataset: {}, value: '__new'});
+  assert.ok(newBox(context.vBookings()), 'inline event box');
+  delete fields['bk-event'];
+  fields['bk-newin'] = {value: 'Welcome To Our House'};
+  clickId(listeners, 'bk-newok');
+  assert.ok(Core.bookingEvents(context.S).includes('Welcome To Our House'));
+  Object.assign(fields, {'bk-role': {value: 'Manager'}, 'bk-name': {value: 'Pat'}, 'bk-event': {value: 'Welcome To Our House'}, 'bk-date': {value: '2027-01-30'}, 'bk-fee': {value: '12'}});
+  clickId(listeners, 'bk-addbtn');
   const pat = context.S.bookings.find(b => b.talent === 'Pat');
   assert.ok(pat);
   assert.equal(pat.role, 'Manager');
+  assert.equal(pat.event, 'Welcome To Our House');
   const saved = Core.validate(JSON.parse(JSON.stringify(context.S)));
   assert.equal(saved.bookings.find(b => b.id === pat.id).talent, 'Pat');
-  assert.equal(saved.bookings.find(b => b.id === pat.id).role, 'Manager');
 });
