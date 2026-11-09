@@ -201,14 +201,14 @@ function mergeData(local,remote){const lr=recordsOf(local),rr=recordsOf(remote),
  return {data:out,conflicts}}
 // ---- bookings: who is booked (talent and crew) per annual event. Each booking is its own sync record (bk:<id>).
 const BOOK_EVENTS=['Welcome To Our House','Brutal Love','Thriller','Throw Down in T-Town','November Rain','A Christmas Story'];
-const BK_ROLES=['Talent','Sound','Camera','Crew'];
+const BK_ROLES=['Talent','Sound','Camera','Crew','Referee','Manager'];
 const bkRole=r=>BK_ROLES.find(x=>norm(x)===norm(r))||'Talent';
 const blankBooking=(o={})=>Object.assign({id:uid(),role:'Talent',talent:'',event:'',date:'',fee:0,note:''},o);
 const feeNum=v=>{const n=parseFloat(String(v==null?'':v).replace(/[$,\s]/g,''));return isFinite(n)&&n>=0?Math.round(n*100)/100:0};
 const money=n=>'$'+feeNum(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 function bookingEvents(d){const seen=new Set(),out=[];BOOK_EVENTS.concat((d.lists&&d.lists.bookingEvents)||[],(d.bookings||[]).map(b=>b.event)).forEach(x=>{x=String(x||'').trim();const k=norm(x);if(k&&!seen.has(k)){seen.add(k);out.push(x)}});return out}
 function bookingEventAdd(d,name){name=String(name||'').trim();if(!name)throw new Error('Event name required');if(bookingEvents(d).some(x=>sameName(x,name)))throw new Error('Event already in the list');d.lists.bookingEvents=(d.lists.bookingEvents||[]).concat([name]);return name}
-// saved names for Sound, Camera and Crew (lists.crew[role]), plus any names already used on bookings
+// saved names for every booking role except Talent (lists.crew[role]), plus any names already used on bookings
 function crewNames(d,role){role=bkRole(role);const c=(d.lists&&d.lists.crew&&d.lists.crew[role])||[];const seen=new Set(),out=[];c.concat((d.bookings||[]).filter(b=>bkRole(b.role)===role).map(b=>b.talent)).forEach(x=>{x=String(x||'').trim();const k=norm(x);if(k&&!seen.has(k)){seen.add(k);out.push(x)}});return out.sort((a,b)=>a.localeCompare(b))}
 function crewNameAdd(d,role,name){role=bkRole(role);name=String(name||'').trim();if(!name||role==='Talent')return;d.lists.crew=d.lists.crew||{};const l=d.lists.crew[role]=d.lists.crew[role]||[];if(!l.some(x=>sameName(x,name)))l.push(name)}
 function bookingAdd(d,o){d.bookings=d.bookings||[];const b=blankBooking(o);b.role=bkRole(b.role);b.fee=feeNum(b.fee);b.talent=String(b.talent||'').trim();crewNameAdd(d,b.role,b.talent);d.bookings.push(b);return b}
