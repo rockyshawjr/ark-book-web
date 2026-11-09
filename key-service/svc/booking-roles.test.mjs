@@ -212,10 +212,8 @@ test('booking role dropdowns list Referee and Manager and the existing roles, an
   assert.equal(rows.find(s => s.bkid === talent.id).options.find(o => o.selected).text, 'Talent');
   assert.equal(rows.find(s => s.bkid === sound.id).options.find(o => o.selected).text, 'Sound');
   assert.match(html, /id="bk-name"/);
-  assert.match(html, new RegExp(`data-bkid="${sound.id}"[^>]*list="bk-dl-Sound"`));
-  assert.match(html, /<datalist id="bk-dl-Sound">/);
-  assert.match(html, /<datalist id="bk-dl-Camera">/);
-  assert.match(html, /<datalist id="bk-dl-Crew">/);
+  const soundName = selects(html).find(s => s.bkf === 'talent' && s.bkid === sound.id);
+  assert.equal(soundName.options.find(o => o.selected).value, 'Mic');
 
   listeners.change.forEach(fn => fn({target: {id: '', dataset: {bkf: 'role', bkid: talent.id}, value: 'Referee'}}));
   assert.equal(talent.role, 'Referee');
@@ -232,9 +230,8 @@ test('booking role dropdowns list Referee and Manager and the existing roles, an
   found = selects(html);
   const refRow = found.find(s => s.bkf === 'role' && s.bkid === talent.id);
   assert.equal(refRow.options.find(o => o.selected).text, 'Referee');
-  assert.match(html, new RegExp(`data-bkid="${talent.id}"[^>]*list="bk-dl-Referee"`));
-  assert.match(html, /<datalist id="bk-dl-Referee">/);
-  assert.match(html, /<datalist id="bk-dl-Manager">/);
+  const refName = selects(html).find(s => s.bkf === 'talent' && s.bkid === talent.id);
+  assert.equal(refName.options.find(o => o.selected).value, 'Earl');
 
   fields['bk-role'] = {value: 'Manager'};
   fields['bk-name'] = {value: 'Paul'};
@@ -252,7 +249,8 @@ test('booking role dropdowns list Referee and Manager and the existing roles, an
   html = context.vBookings();
   const mgrRow = selects(html).find(s => s.bkf === 'role' && s.bkid === mgr.id);
   assert.equal(mgrRow.options.find(o => o.selected).text, 'Manager');
-  assert.match(html, new RegExp(`data-bkid="${mgr.id}"[^>]*list="bk-dl-Manager"`));
+  const mgrName = selects(html).find(s => s.bkf === 'talent' && s.bkid === mgr.id);
+  assert.equal(mgrName.options.find(o => o.selected).value, 'Paul');
 });
 
 test('crew sync through the key service keeps Referee and Manager and does not rewrite existing roles', async () => {
