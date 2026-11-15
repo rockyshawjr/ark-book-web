@@ -37,7 +37,7 @@ class KeySync extends W.WebSync{
    this.kv.set('syncState',{joined:true,tree:r.tree||{},last:this.now()});let applied=false;
    if(JSON.stringify(this.kv.get('data'))===sent){if(JSON.stringify(r.data)!==sent){this.kv.set('data',r.data);applied=true}}else this.pending_=true; // edited while syncing: keep the edit, sync again
    if(applied)this.notify({type:'applied'});this.notify({type:'media'});return {summary:r.summary||'Synced',warn:r.warn||[]}}
-  catch(e){if(e.svc){const x=new Error(e.svc===401?'This Ark-Book key was revoked or is not valid. Ask Rocky for a new one.':e.message);x.status=0;throw x}throw e}}
+  catch(e){if(e.svc){const x=new Error(e.svc===401?'This RingBoss key was revoked or is not valid. Ask Rocky for a new one.':e.message);x.status=0;throw x}throw e}}
  async getFile(path){const sha=this.view()[path];if(!sha)return null;let u=await this.blobs.get(sha);if(u)return u;if(!this.token)return null;
   u=await svcCall('GET','/blob?path='+encodeURIComponent(path),{headers:{'x-ark-key':this.token},raw:true});if(u)await this.blobs.put(sha,u);return u}}
 let sync=null,timer=null,loop=null;
@@ -61,11 +61,11 @@ async function place(ev,kind,file){const e=W.ext(file.name);if(!W.AEXT.includes(
  for(const p of Object.keys(v))if(p.startsWith(d+'/')&&v[p]===sha)return {path:p,duplicate:true};
  const dot=file.name.lastIndexOf('.'),base=W.asafe(file.name.slice(0,dot>0?dot:file.name.length)),x='.'+e;let dst=`${d}/${base}${x}`,n=2;while(v[dst])dst=`${d}/${base} (${n++})${x}`;
  await sync.putFile(dst,u,sha);return {path:dst,duplicate:false}}
-function settings(prefill){const c=cfg(),has=!!LS.getItem('ark.token'),hasKey=!!KEY;const o=document.createElement('div');o.id='setup';o.innerHTML=`<div class="g pad box"><h2>Sign in to sync</h2><div class="note">Paste the GitHub sync token the Macs use (full access, Rocky only), or an Ark-Book key from Rocky (starts with ark_, limited access, no fees). It is stored only on this device.</div>
- ${hasKey?`<div class="note">Signed in with an Ark-Book key: <b>${(window.ARK.label||'key').replace(/[<>&"]/g,'')}</b> (${window.ARK.role==='crew'?'Crew':'View only'})</div>`:''}
- <input id="tk" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${has?'GitHub token saved (type a new one to replace)':hasKey?'Ark-Book key saved (paste a new one to replace)':'GitHub sync token or Ark-Book key'}"><details><summary class="note">Advanced</summary><input id="own" placeholder="owner" value="${c.owner||'rockyshawjr'}"><input id="rep" placeholder="repo" value="${c.repo||'g12-updates'}"><input id="brn" placeholder="branch" value="${c.branch||'ark-book-data'}"></details>
+function settings(prefill){const c=cfg(),has=!!LS.getItem('ark.token'),hasKey=!!KEY;const o=document.createElement('div');o.id='setup';o.innerHTML=`<div class="g pad box"><h2>Sign in to sync</h2><div class="note">Paste the GitHub sync token the Macs use (full access, Rocky only), or a RingBoss key from Rocky (starts with ark_, limited access, no fees). It is stored only on this device.</div>
+ ${hasKey?`<div class="note">Signed in with a RingBoss key: <b>${(window.ARK.label||'key').replace(/[<>&"]/g,'')}</b> (${window.ARK.role==='crew'?'Crew':'View only'})</div>`:''}
+ <input id="tk" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${has?'GitHub token saved (type a new one to replace)':hasKey?'RingBoss key saved (paste a new one to replace)':'GitHub sync token or RingBoss key'}"><details><summary class="note">Advanced</summary><input id="own" placeholder="owner" value="${c.owner||'rockyshawjr'}"><input id="rep" placeholder="repo" value="${c.repo||'g12-updates'}"><input id="brn" placeholder="branch" value="${c.branch||'ark-book-data'}"></details>
  <div class="row"><button class="b" id="tsave">Save and sync</button>${has||hasKey?'<button class="b o" id="tdis">Disconnect</button>':''}<button class="b o" id="tx">Close</button></div><div class="note" id="tmsg"></div></div>`;document.body.appendChild(o);
- const tk=o.querySelector('#tk'),msg=o.querySelector('#tmsg');if(prefill){tk.value=prefill;msg.textContent='Ark-Book key filled in from the QR code. Tap Save and sync.'}
+ const tk=o.querySelector('#tk'),msg=o.querySelector('#tmsg');if(prefill){tk.value=prefill;msg.textContent='RingBoss key filled in from the QR code. Tap Save and sync.'}
  o.querySelector('#tx').onclick=()=>o.remove();
  o.querySelector('#tsave').onclick=async()=>{const t=tk.value.trim();kv.set('cfg',{owner:o.querySelector('#own').value.trim()||'rockyshawjr',repo:o.querySelector('#rep').value.trim()||'g12-updates',branch:o.querySelector('#brn').value.trim()||'ark-book-data',svc:c.svc});
   if(/^ark_/.test(t)){msg.textContent='Checking key...';try{const me=await svcCall('GET','/me',{headers:{'x-ark-key':t}});
@@ -73,9 +73,9 @@ function settings(prefill){const c=cfg(),has=!!LS.getItem('ark.token'),hasKey=!!
     LS.removeItem('ark.token');LS.setItem('ark.arkkey',t);LS.setItem('ark.keyRole',me.role);LS.setItem('ark.keyLabel',me.label||'');location.reload()}catch(e){msg.textContent=e.message}return}
   if(t&&hasKey){LS.removeItem('ark.arkkey');LS.removeItem('ark.keyRole');LS.removeItem('ark.keyLabel');LS.setItem('ark.token',t);location.reload();return}
   if(t)LS.setItem('ark.token',t);mkSync();o.remove();sync.syncNow()};
- const d=o.querySelector('#tdis');if(d)d.onclick=()=>{if(hasKey){if(confirm('Remove the Ark-Book key from this device? Its copy of the data is cleared too.')){Object.keys(LS).filter(k=>k.startsWith('arkk.')).forEach(k=>LS.removeItem(k));['ark.arkkey','ark.keyRole','ark.keyLabel'].forEach(k=>LS.removeItem(k));location.reload()}return}
+ const d=o.querySelector('#tdis');if(d)d.onclick=()=>{if(hasKey){if(confirm('Remove the RingBoss key from this device? Its copy of the data is cleared too.')){Object.keys(LS).filter(k=>k.startsWith('arkk.')).forEach(k=>LS.removeItem(k));['ark.arkkey','ark.keyRole','ark.keyLabel'].forEach(k=>LS.removeItem(k));location.reload()}return}
   if(confirm('Remove the sync token from this phone? Local data stays.')){LS.removeItem('ark.token');mkSync();o.remove();emit({type:'status',status:sync.status})}}}
-const unsupported=m=>({error:m});const RO=()=>!window.ARK.edit;const roErr={error:KEY?'View-only key: changes are not saved':'Read only: sign in with an Ark-Book key to make changes'};
+const unsupported=m=>({error:m});const RO=()=>!window.ARK.edit;const roErr={error:KEY?'View-only key: changes are not saved':'Read only: sign in with a RingBoss key to make changes'};
 window.sb={
  load:async()=>{const d=kv.get('data');if(PUB){if(d&&Array.isArray(d.bookings))d.bookings=d.bookings.map(b=>Object.assign({},b,{fee:0}));return {data:d,path:'read only (no key)'}}return {data:d,path:'this phone (synced through GitHub)'}},
  save:async d=>{if(!window.ARK.edit)return true;kv.set('data',d);kv.set('dataMtime',Date.now());kick();return true},
@@ -83,8 +83,8 @@ window.sb={
  openFolder:async()=>settings(),board:async()=>null,pathForFile:f=>f,urlFor,
  exportEvent:async(kind,data,id)=>{const ev=data.events.find(x=>x.id===id);if(!ev)return null;const base=(ev.name.replace(/[^\w\- ]+/g,'').trim()||'event');
   if(kind==='md'){dl(base+'.md',Core.toMarkdown(data,ev),'text/markdown');return base+'.md (downloaded)'}
-  const sheet=kind.startsWith('sheet');const html=sheet?Core.toSheetHTML(data,ev):Core.toHTML(data,ev,window.ArkTheme?ArkTheme.logoFor(data,'logo.png'):'logo.png');const w=window.open('','_blank');if(!w)return 'Pop-up blocked. Allow pop-ups to print or save as PDF.';w.document.write(html);w.document.close();setTimeout(()=>w.print(),600);return 'opened for print / Save as PDF'},
- backupExport:async d=>{dl('Ark-Book-backup-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(d,null,1),'application/json');return 'downloaded (JSON only, no media)'},
+  const sheet=kind.startsWith('sheet');const html=sheet?Core.toSheetHTML(data,ev):Core.toHTML(data,ev,window.ArkTheme?ArkTheme.logoFor(data,'12gauge-logo.png'):'12gauge-logo.png');const w=window.open('','_blank');if(!w)return 'Pop-up blocked. Allow pop-ups to print or save as PDF.';w.document.write(html);w.document.close();setTimeout(()=>w.print(),600);return 'opened for print / Save as PDF'},
+ backupExport:async d=>{dl('RingBoss-backup-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(d,null,1),'application/json');return 'downloaded (JSON only, no media)'},
  backupImport:async()=>{if(RO())return roErr;const [f]=await pick('.json,application/json');if(!f)return null;try{return {data:Core.validate(JSON.parse(await f.text())),path:f.name}}catch(e){return {error:String(e.message||e)}}},
  mediaAll:async names=>{const out={};await Promise.all(names.map(async n=>{const p=promoPath(n);out[n]={promo:p?await ensure(p).catch(()=>null):null,video:null,music:null}}));return out},
  mediaAttach:async(n,kind,src)=>{if(RO())return roErr;if(kind!=='promo')return {error:'Intro '+(kind==='video'?'videos':'music')+' are added on the Mac. Only promo pictures can be attached on the phone.'};
@@ -104,7 +104,7 @@ window.sb={
  archiveOpen:async fp=>{const u=await ensure(fp);if(u)window.open(u,'_blank')},archiveReveal:async()=>{},
  archiveSaveExport:async()=>unsupported('Exporting a match card into the archive is done on the Mac. On the phone, attach an image or PDF instead.'),
  archiveZipYear:async()=>unsupported('Year zip export is a Mac feature.')};
-window.addEventListener('load',()=>{const b=document.getElementById('bdir');if(b)b.textContent=KEY?'Ark-Book key':'Sign in to sync';
+window.addEventListener('load',()=>{const b=document.getElementById('bdir');if(b)b.textContent=KEY?'RingBoss key':'Sign in to sync';
  document.body.classList.toggle('ark-nofee',!window.ARK.fees);document.body.classList.toggle('ark-ro',!window.ARK.edit);document.body.classList.toggle('ark-admin',!!window.ARK.admin);const rl=document.getElementById('arkrole');if(rl)rl.textContent=KEY?(window.ARK.role==='crew'?'Crew key (no fees)':'View-only key'):PUB?'Read only (no key)':'';
  const m=/[#&]arkkey=(ark_[A-Za-z0-9_-]+)/.exec(location.hash);if(m){history.replaceState(null,'',location.pathname+location.search);setTimeout(()=>settings(m[1]),400);return}
  if(!LS.getItem('ark.token')&&!KEY&&!LS.getItem('ark.asked')){LS.setItem('ark.asked','1');setTimeout(settings,600)}});

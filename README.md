@@ -1,12 +1,12 @@
-# Ark-Book (web / iPhone)
+# RingBoss (web / iPhone)
 
-Static Home Screen web app for Ark-Book. **This repo contains the app only: no data and no tokens.**
+Static Home Screen web app for RingBoss (formerly Ark-Book). **This repo contains the app only: no data and no tokens.**
 Your data lives in the private `ark-book-data` branch of `rockyshawjr/g12-updates` and is read and written through the GitHub API with a token you type on the phone once (stored in that phone's localStorage only).
 
 ## Install on iPhone
 1. Open https://rockyshawjr.github.io/ark-book-web/ in **Safari**.
 2. Tap Share, then **Add to Home Screen**, then Add.
-3. Open Ark-Book from the Home Screen. Tap **Phone sync token** (it opens on first launch), paste the same sync token the Macs use, tap **Save and sync**.
+3. Open RingBoss from the Home Screen. Tap **Phone sync token** (it opens on first launch), paste the same sync token the Macs use, tap **Save and sync**.
 
 ## Using it
 - Tap any field for the dropdown. **Long-press** a field, match row or event for the right-click menu (swap, clear, remove, edit text).
